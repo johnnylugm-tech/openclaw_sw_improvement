@@ -130,13 +130,50 @@ Priority: **severity-first, not score-first** — a dimension can be at target b
 
 ---
 
-## CRG Integration
+## CRG Dependency
 
-CRG is auto-detected on `setup_target.py` run. Status written to `.sessi-work/crg_status.json`.
+**CRG is a required dependency for full functionality.** It provides structural intelligence:
+architecture weakness detection, hub/bridge node analysis, dead code, and community cohesion.
 
-If `available: true`, the `crg_reconnaissance.md` protocol runs 9 CRG commands:
-- `hub-nodes`, `bridge-nodes`, `communities`, `arch-overview`, `flows`
-- `dead-code`, `surprising`, `knowledge-gaps`, `stats`
+### Installation (once per machine)
+
+```bash
+./scripts/install_crg.sh
+```
+
+This script:
+1. Installs `code-review-graph` (pip)
+2. Applies Python 3.12 `sqlite3.Row.get()` compatibility patch to `graph.py`
+3. Verifies all CRG commands work
+
+> **Note:** The `sqlite3.Row.get()` patch is required because CRG uses `c.get("key", default)`
+> internally, but Python 3.12's `sqlite3.Row` does not implement `.get()`. This is a known CRG
+> upstream issue tracked at https://github.com/code-review-graph. The patch is idempotent — running
+> `install_crg.sh` multiple times is safe.
+
+### CRG Availability Check
+
+After installation, CRG is auto-detected on every `quality_loop.py init`. Status written to
+`.sessi-work/crg_status.json`.
+
+If `available: false`, the framework runs without structural analysis (tool-only evaluation).
+
+### CRG Commands Used
+
+All via `scripts/crg_wrapper.py` (no MCP needed):
+
+| Command | Purpose |
+|---------|---------|
+| `hub-nodes` | Find most-connected nodes (architecture hotspots) |
+| `bridge-nodes` | Find betweenness centrality chokepoints |
+| `communities` | List code communities + cohesion scores |
+| `arch-overview` | Architecture map with cross-community edges |
+| `flows` | Execution flow criticality ranking |
+| `dead-code` | Unreferenced functions/classes |
+| `surprising` | Unexpected cross-module couplings |
+| `knowledge-gaps` | Thin communities, god modules, untested hotspots |
+| `stats` | Node/edge/file counts |
+| `suggested-questions` | Auto-generated investigation priorities |
 
 Results written to:
 - `.sessi-work/crg_reconnaissance.json`
