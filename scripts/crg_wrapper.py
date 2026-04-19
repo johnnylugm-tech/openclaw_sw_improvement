@@ -40,7 +40,7 @@ def _patch_knowledge_gaps_result(rows):
 
 def cmd_stats(repo_path: str) -> dict:
     """Return graph statistics."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -57,7 +57,7 @@ def cmd_stats(repo_path: str) -> dict:
 
 def cmd_hub_nodes(repo_path: str, top_n: int = 10) -> dict:
     """Find most connected hub nodes."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -67,7 +67,7 @@ def cmd_hub_nodes(repo_path: str, top_n: int = 10) -> dict:
 
 def cmd_bridge_nodes(repo_path: str, top_n: int = 10) -> dict:
     """Find structural chokepoints (bridge nodes)."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -77,7 +77,7 @@ def cmd_bridge_nodes(repo_path: str, top_n: int = 10) -> dict:
 
 def cmd_communities(repo_path: str, min_size: int = 3) -> dict:
     """List code communities."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -87,7 +87,7 @@ def cmd_communities(repo_path: str, min_size: int = 3) -> dict:
 
 def cmd_arch_overview(repo_path: str) -> dict:
     """Generate architecture overview."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -97,7 +97,7 @@ def cmd_arch_overview(repo_path: str) -> dict:
 
 def cmd_flows(repo_path: str, limit: int = 50) -> dict:
     """List execution flows."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -107,7 +107,7 @@ def cmd_flows(repo_path: str, limit: int = 50) -> dict:
 
 def cmd_dead_code(repo_path: str) -> dict:
     """Find unreferenced functions/classes."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -117,7 +117,7 @@ def cmd_dead_code(repo_path: str) -> dict:
 
 def cmd_surprising(repo_path: str, top_n: int = 15) -> dict:
     """Find unexpected architectural couplings."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
@@ -127,7 +127,7 @@ def cmd_surprising(repo_path: str, top_n: int = 15) -> dict:
 
 def cmd_knowledge_gaps(repo_path: str) -> dict:
     """Find structural weaknesses (untested hotspots)."""
-    db_path = get_db_path(repo_path)
+    db_path = get_db_path(Path(repo_path))
     if not Path(db_path).exists():
         return {"available": False, "reason": "Graph not built"}
     store = GraphStore(str(db_path))
