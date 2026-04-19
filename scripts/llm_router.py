@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 LLM Router: Unified MiniMax M2.7 routing for all dimension evaluations.
 

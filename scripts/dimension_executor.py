@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Dimension Executor: Subprocess wrapper for 12 quality dimension tools.
 

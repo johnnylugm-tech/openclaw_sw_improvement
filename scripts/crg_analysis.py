@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 CRG Analysis: Convert raw CRG wrapper output into structured metrics.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Setup Target: Clone GitHub repo or use local path, write crg_status.json.
 

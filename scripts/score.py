@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Score Aggregation: Computes weighted overall score from per-dimension scores.
 
@@ -135,9 +135,12 @@ def compute_overall_score(scores, config, registry=None, crg_metrics=None):
 
 
 def main():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or sys.argv[1] in ("--help", "-h"):
         print(f"Usage: {sys.argv[0]} <round_dir> [config.json] [issue_registry.json]")
-        sys.exit(1)
+        print("  round_dir: path to .sessi-work/round_<n>")
+        print("  config.json: resolved config (optional)")
+        print("  issue_registry.json: persistent issue registry (optional)")
+        sys.exit(0)
     round_dir = sys.argv[1]
     config_path = sys.argv[2] if len(sys.argv) > 2 else None
     registry_path = sys.argv[3] if len(sys.argv) > 3 else None

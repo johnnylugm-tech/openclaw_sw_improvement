@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Config Loader: YAML → JSON resolver with defaults merging and weight normalization.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Quality Loop: State machine orchestrator for quality improvement rounds.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3.12
 """
 Verification: Deterministic anti-bias check that caps unsupported claims
 

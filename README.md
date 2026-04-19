@@ -42,13 +42,13 @@ openclaw_sw_improvement/
 cd /tmp/openclaw_sw_improvement
 
 # Initialize with a target repo
-python3 scripts/quality_loop.py init /path/to/repo config.example.yaml
+./scripts/quality_loop.py init /path/to/repo config.example.yaml
 
 # Run the full quality loop (up to max_rounds)
-python3 scripts/quality_loop.py run
+./scripts/quality_loop.py run
 
 # Check status
-python3 scripts/quality_loop.py status
+./scripts/quality_loop.py status
 ```
 
 ## Quality Loop Phases
@@ -111,11 +111,11 @@ init → setup → recon → round (3a-f) → [round+1] → ... → quality_comp
 
 ```bash
 # Initialize for a Python project
-python3 scripts/quality_loop.py init ./myproject config.example.yaml
+./scripts/quality_loop.py init ./myproject config.example.yaml
 
 # Run up to 3 rounds
-python3 scripts/quality_loop.py run
+./scripts/quality_loop.py run
 
 # Resume if interrupted
-python3 scripts/quality_loop.py resume
+./scripts/quality_loop.py resume
 ```
