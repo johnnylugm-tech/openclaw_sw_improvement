@@ -15,6 +15,15 @@
 
 ---
 
+## Prerequisites
+
+- **Python 3.12** — all scripts use `#!/opt/homebrew/bin/python3.12` shebang
+  - CRG requires Python 3.12; system `python3` (macOS Homebrew = Python 3.14) does **not** have CRG
+  - Run `python3 --version` to check. Scripts are executable directly (`./scripts/xxx.py`) once Python 3.12 is available.
+  - If `python3` is not 3.12, invoke scripts explicitly: `/opt/homebrew/bin/python3.12 scripts/xxx.py`
+- **Git**
+- **CRG** — installed by `./scripts/install_crg.sh` (see CRG Dependency section)
+
 ## Overview
 
 The OpenClaw SW Improvement Framework runs multi-round quality improvement loops on any repository. Each round:
