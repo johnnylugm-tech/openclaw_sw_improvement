@@ -110,17 +110,14 @@ def cmd_stats(repo_path):
         return {"available": False, "reason": "no graph DB found"}
     store = _store(repo_path)
     try:
-        cur = store._conn.execute(
-            "SELECT key, value FROM metadata "
-            "WHERE key IN ('node_count','edge_count','file_count','schema_version')"
-        )
-        rows = cur.fetchall()
-        stats = {str(r[0]): r[1] for r in rows}
+        node_count = store._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+        edge_count = store._conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
+        file_count = store._conn.execute("SELECT COUNT(DISTINCT file_path) FROM nodes").fetchone()[0]
         return {
             "available": True,
-            "node_count": int(stats.get("node_count", 0)),
-            "edge_count": int(stats.get("edge_count", 0)),
-            "file_count": int(stats.get("file_count", 0)),
+            "node_count": node_count,
+            "edge_count": edge_count,
+            "file_count": file_count,
         }
     finally:
         store.close()

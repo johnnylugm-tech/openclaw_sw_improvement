@@ -7,9 +7,44 @@ Each target is cloned to a temporary directory to avoid side effects.
 
 import sys
 import subprocess
+import sqlite3
 from pathlib import Path
 import tempfile
 import json
+
+
+# ---------------------------------------------------------------------------
+# CRG sqlite3.Row patch (Python 3.12 bug: no .get() method)
+# Applied once at startup; idempotent.
+# ---------------------------------------------------------------------------
+CRG_GRAPH_PY = Path("/opt/homebrew/lib/python3.12/site-packages/code_review_graph/graph.py")
+
+def _apply_crg_patch():
+    """Patch graph.py to add RowWithGet class if not already present."""
+    if not CRG_GRAPH_PY.exists():
+        return  # CRG not installed, skip
+    content = CRG_GRAPH_PY.read_text()
+    if "class RowWithGet" in content:
+        return  # already patched
+
+    class_def = '''
+# --- OpenClaw CRG patch: sqlite3.Row has no .get() in Python 3.12 ---
+class RowWithGet(sqlite3.Row):
+    def get(self, key, default=None):
+        try:
+            return sqlite3.Row.__getitem__(self, key)
+        except (KeyError, IndexError, TypeError):
+            return default
+'''
+    # Inject after 'import sqlite3\n'
+    patched = content.replace("import sqlite3\n", "import sqlite3\n" + class_def + "\n", 1)
+    patched = patched.replace("self._conn.row_factory = sqlite3.Row",
+                                "self._conn.row_factory = RowWithGet")
+    CRG_GRAPH_PY.write_text(patched)
+    print("[CRG] Patched graph.py for Python 3.12 sqlite3.Row.get()",
+          file=sys.stderr)
+
+_apply_crg_patch()
 
 
 def clone_repo(github_url):
