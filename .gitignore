@@ -1,0 +1,15 @@
+# Runtime state
+.sessi-work/
+quality_state.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+
+# OS
+.DS_Store
+*.swp
+
+# Reports
+.sessi-work/
