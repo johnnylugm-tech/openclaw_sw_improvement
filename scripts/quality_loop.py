@@ -144,6 +144,12 @@ def run_setup(state: dict) -> dict:
 
     state["phase"] = "recon"
     state["step"] = "recon_start"
+
+    # Generate resolved config.json for downstream scripts (score.py needs it)
+    config_path = WORK_DIR / "config.json"
+    with open(config_path, "w") as f:
+        json.dump(state["config"], f)
+
     state["last_updated"] = iso_now()
     save_state(state)
     return state
