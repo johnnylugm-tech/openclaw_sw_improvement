@@ -171,7 +171,7 @@ def run_reconnaissance(state: dict) -> dict:
         }
         for cmd in ["stats", "hub-nodes", "bridge-nodes", "communities",
                     "arch-overview", "flows", "dead-code", "surprising",
-                    "knowledge-gaps"]:
+                    "knowledge-gaps", "suggested-questions"]:
             try:
                 result = subprocess.run(
                     [sys.executable, str(crg_script), cmd, target],
@@ -185,6 +185,21 @@ def run_reconnaissance(state: dict) -> dict:
         # Write reconnaissance report
         recon_file = work_dir / "crg_reconnaissance.json"
         recon_file.write_text(json.dumps(recon_data, indent=2, ensure_ascii=False))
+
+        # Generate crg_metrics.json from reconnaissance data (needed for score.py deep integration)
+        metrics_file = work_dir / "crg_metrics.json"
+        try:
+            mr = subprocess.run(
+                [sys.executable, str(scripts_dir / "crg_analysis.py"), "metrics",
+                 str(recon_file), str(metrics_file)],
+                capture_output=True, text=True, timeout=60,
+            )
+            if mr.returncode != 0:
+                print(f"[CRG] metrics generation failed: {mr.stderr[:100]}", file=sys.stderr)
+            # metrics_file is written by crg_analysis.py directly
+        except Exception as e:
+            print(f"[CRG] metrics generation error: {e}", file=sys.stderr)
+
         state["reconnaissance_done"] = True
     else:
         state["reconnaissance_done"] = False
@@ -400,8 +415,10 @@ def main():
         target = sys.argv[2] if len(sys.argv) > 2 else str(WORK_DIR)
         config = sys.argv[3] if len(sys.argv) > 3 else str(WORK_DIR / "config.example.yaml")
         state = init_state(target, config)
+        state = run_setup(state)
+        state = run_reconnaissance(state)
         print(json.dumps(state, indent=2))
-        print("\nState initialized. Run 'run' to execute.")
+        print("\nInitialized and CRG ready. Run 'run' to execute rounds.")
 
     elif cmd == "run":
         state = load_state()
