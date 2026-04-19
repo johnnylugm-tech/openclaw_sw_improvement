@@ -24,15 +24,29 @@ Read:
 
 ## Step 1a: Structural Verification (CRG, if available)
 
-Refresh the graph and measure structural drift:
+Refresh the graph and measure structural drift vs previous round:
 
 ```bash
-python3 scripts/crg_wrapper.py stats <repo_path>
+# Refresh graph after all round commits
+code-review-graph update --repo <target>
+
+# Get previous round tag
+PREV_TAG=$(git tag -l "round-*" | sort -V | tail -1)
+
+# Measure drift vs previous round
+git rev-parse "$PREV_TAG" > /dev/null 2>&1 && \
+  code-review-graph detect-changes --base "$PREV_TAG" --repo <target> || \
+  echo "No previous round tag found"
 ```
 
-Two classes of regression to escalate:
-- **Architectural drift** — new hub nodes appeared, risk_score jumped > 0.2
-- **Test gap expansion** — test gaps count grew this round
+**Decision rules:**
+- `risk_score >= 0.4` → **trigger revert protocol** (structural drift too high)
+- New untested functions detected → auto-register as `test_coverage` issues in registry
+- `risk_score < 0.4` → proceed normally
+
+**Escalation:**
+- Architectural drift → new hub nodes → register as `architecture` issues
+- Test gap expansion → missing tests → register as `test_coverage` issues
 
 ---
 

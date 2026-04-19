@@ -74,11 +74,33 @@ python3 scripts/issue_tracker.py wontfix \
 
 ## Step 3: Per-Issue Fix + Verification Loop
 
-For each open issue:
-1. Apply fix (minimal, targeted change)
-2. Re-run dimension tool
+### 3a. Pre-Fix Safety Gate (CRG Blast Radius)
+
+**Run before every fix.** If the change touches a hub/bridge node or has high risk_score, defer instead of committing blindly.
+
+```bash
+# Blast radius of the current uncommitted changes vs HEAD
+code-review-graph detect-changes --base HEAD 2>/dev/null || true
+```
+
+**Decision rules:**
+- `risk_score >= 0.7` → **defer** (too risky to auto-commit)
+- Fix touches a hub node or bridge node → **defer** (high blast radius)
+- Fix is safe → proceed to Step 3b
+
+> If CRG is not available (`crg_status.json` shows `available: false`),
+> skip this gate and rely on the dimension tool re-run verification only.
+
+### 3b. Apply Fix
+
+Apply fix (minimal, targeted change).
+
+### 3c. Post-Fix Verification
+
+1. Re-run dimension tool to confirm improvement
+2. Run `code-review-graph detect-changes --base round-<n>` to confirm no blast regression
 3. Decide outcome:
-   - IF improvement and no regression → git commit, `issue_tracker.py fix`
+   - IF improvement and no regression → git commit, `issue_tracker.py fix <id> <round> "<sha>"`
    - IF no improvement → defer, `issue_tracker.py defer <id> <round> "<reason>"`
    - IF intentionally rejected → wontfix, `issue_tracker.py wontfix <id> <round> "<reason>"`
 
