@@ -340,6 +340,25 @@ def run_round(state: dict) -> dict:
         meets_target and open_critical == 0 and open_high == 0
     )
 
+    # Step 3e: saturation check — if no new issues for 3 consecutive rounds, stop
+    if not quality_complete and registry_path.exists():
+        try:
+            from pathlib import Path as _P
+            from scripts.issue_tracker import saturation_check as _sc
+            # Check last 3 rounds
+            recent = [r for r in state["round_results"] if r.get("round") and r["round"] >= round_num - 2]
+            score_history = [r["overall_score"] for r in recent]
+            no_improvement = len(score_history) >= 2 and score_history[-1] <= score_history[-2]
+            saturated = _sc(str(registry_path), round_num)
+            if saturated and no_improvement:
+                state["quality_complete"] = True
+                state["quality_complete_reason"] = "saturation: no new issues for 3 rounds and no score improvement"
+                state["last_updated"] = iso_now()
+                save_state(state)
+                return state
+        except Exception:
+            pass  # Saturation check failed, continue normally
+
     # Store round result
     round_result = {
         "round": round_num,
