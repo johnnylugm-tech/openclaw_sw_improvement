@@ -1,4 +1,8 @@
-# SKILL.md — OpenClaw SW Improvement Framework
+# Auto-Research Quality Improvement Skill (OpenClaw Version)
+
+Implements an auto-research-style quality improvement loop for GitHub repos or local folders, with configurable targets across 12 core + 5 optional dimensions.
+
+**Design principle:** The goal is **actual quality improvement** — resolving every critical/high issue found — not reaching a numeric score. Scores are a minimum gate; the issue registry is the source of truth for completion.
 
 ## Metadata
 
@@ -14,7 +18,7 @@
   - "quality scan"
   - "軟體品質提升"
   - "SW improvement"
-- **source**: `~/.openclaw/workspace/software_self_improvement/` (local workspace path)
+- **source**: `/tmp/openclaw_sw_improvement/` or GitHub `johnnylugm-tech/openclaw_sw_improvement`
 
 ---
 
@@ -25,144 +29,392 @@
 ### 觸發範例
 
 ```
-Human: "run quality improvement on https://github.com/user/repo"
-Human: "analyze code quality for my project"
-Human: "SW improvement /path/to/my/project"
+Human: "quality improvement on https://github.com/user/repo"
+Human: "SW improvement on /path/to/my/project"
 Human: "軟體品質提升"
 ```
 
-### Agent 執行流程（內部自動執行）
+### Agent 內部執行（完整流程）
 
 ```
-1. 讀取 SKILL.md（就是這份文件）
-2. 執行 quality_loop.py init <target_repo>  — 初始化
-3. 執行 quality_loop.py run                   — 跑完整 quality loop
-4. 回報結果 + 最終報告位置
-```
-
-### Agent 內部使用的 Scripts（人類看不到）
-
-| Script | 用途 |
-|--------|------|
-| `quality_loop.py` | 狀態機，驅動整個流程 |
-| `dimension_executor.py` | 執行 12 種 quality tools |
-| `crg_wrapper.py` | CRG 結構分析（9 commands）|
-| `score.py` | 加權分數計算 |
-| `verify.py` | Anti-bias 驗證 |
-| `checkpoint.py` | 每輪存檔 |
-| `issue_tracker.py` | Issue 持久化追蹤 |
-| `report_gen.py` | 最終報告生成 |
-| `setup_target.py` | Clone target + CRG check |
-| `crg_analysis.py` | CRG metrics 結構化 |
-| `llm_router.py` | 統一 MiniMax M2.7 |
-
----
-
-## 必要前置（Agent 自動處理）
-
-- **Python 3.12**: 系統 `python3` 可能是 3.14，CRG 需要 3.12
-  - Agent 自動偵測，若失敗則用 `/opt/homebrew/bin/python3.12`
-- **CRG**: 若未安裝，Agent 自動執行 `install_crg.sh`（一次性的 patch script）
-
----
-
-## 執行階段（State Machine）
-
-```
-init → setup → recon → round (最多3輪) → quality_complete
-         ↓
-     若 crg_available=false → 跳過 recon，直接 round
-```
-
-每個 `round` 內部：
-```
-3a: 執行 12 個 dimension tools → 各自 JSON
-3b: score.py 計算加權分數
-3c: verify.py 防 bias 驗證
-3d: checkpoint.py 存檔
-3e: quality_complete 檢查
-     → 分數 >= 85 AND 無 open critical/high → 完成
-     → 否則 → 3f
-3f: 依 severity 順序修復 open issues → 下一輪
+Human: "quality improvement on https://github.com/user/repo"
+     ↓
+Agent（我，身為 LLM）:
+  1. 讀 SKILL.md（這份文件）→ 了解完整執行規格
+  2. 讀 prompts/ 目錄下的所有 prompt 檔案
+  3. 執行 Step 1 → config.yaml → config.json
+  4. 執行 Step 2 → setup_target.py（clone + CRG auto-build）
+  5. 執行 Step 2.5 → CRG structural reconnaissance（若 CRG 可用）
+  6. 執行 Step 3（最多 3 輪）:
+     3a. 執行 12 dims evaluation（dimension_executor.py + evaluate_dimension.md prompt）
+     3b. score.py 計算加權分數
+     3c. verify.py 防 bias 驗證
+     3d. checkpoint.py 存檔 + git tag round-<n>
+     3e. quality_complete 檢查
+         → 分數 >= 85 AND 無 open critical/high → 完成
+         → 否則 → 3f
+     3f. 依 severity 順序修復 open issues（LLM 直接改 code）
+  7. 執行 Step 4 → report_gen.py 生成最終報告
+  8. git tag v2.0（若 quality_complete=true）
+  9. 向 Human 回報結果
 ```
 
 ---
 
-## 12 Quality Dimensions
+## Execution Contract
 
-| # | Dimension | Tool | Weight | Target |
-|---|-----------|------|--------|--------|
-| 1 | linting | pylint | 0.06 | 95 |
-| 2 | type_safety | mypy | 0.10 | 95 |
-| 3 | test_coverage | pytest --cov | 0.13 | 80 |
-| 4 | security | bandit | 0.10 | 90 |
-| 5 | performance | (skip) | 0.07 | 80 |
-| 6 | architecture | cloc + CRG | 0.07 | 80 |
-| 7 | readability | radon | 0.06 | 85 |
-| 8 | error_handling | grep try: | 0.09 | 85 |
-| 9 | documentation | grep docstring | 0.10 | 85 |
-| 10 | secrets_scanning | gitleaks | 0.08 | 100 |
-| 11 | mutation_testing | (skip) | 0.08 | 70 |
-| 12 | license_compliance | scancode | 0.06 | 95 |
+### Step 1: Resolve Configuration
+- Load user config from `config.yaml` (or `config.advanced.yaml`)
+- Merge with defaults; validate all dimensions exist
+- Normalize weights across enabled dimensions
+- Output: resolved config JSON
+
+### Step 2: Resolve Target
+- Clone GitHub repo (if URL) or use local folder path
+- Set up working directory with git tracking
+- **Auto-initialize CRG** (transparent): detect if `code-review-graph` is installed;
+  if yes and no graph exists → auto-build; write result to `.sessi-work/crg_status.json`
+- Initialize issue registry at `.sessi-work/issue_registry.json` (persists across rounds)
+- Output: TARGET_PATH to stdout
+
+```bash
+python3 scripts/setup_target.py <github-url-or-local-path> [work_dir]
+# Stderr shows CRG status: "[CRG] ✓ Ready — 342 nodes (auto-built)"
+#                        or "[CRG] Not available — not installed. Framework will run without CRG."
+```
+
+### Step 2.5: CRG Structural Reconnaissance (if CRG available)
+
+Runs **once per session**, before the first evaluation round.
+Follows `prompts/crg_reconnaissance.md`.
+
+9 CRG queries → structural intelligence baseline:
+- **High-risk components** — hub + bridge nodes with high centrality
+- **Untested hotspots** — hub nodes in knowledge gaps → pre-seeded as `high` issues
+- **Module cohesion** — low-cohesion communities → pre-seeded as `medium` issues
+- **Unexpected couplings** — surprising cross-module edges → pre-seeded as `medium` issues
+- **Dead code** — unreferenced functions/classes → pre-seeded as `low` issues
+
+Output: `.sessi-work/crg_reconnaissance.json` + pre-seeded issues in registry.
+This file is read by evaluate_dimension.md Step 2a to focus per-dimension analysis.
+
+> Token cost: ~3,900 tokens total (vs ~10,000+ for blind file reading).
+> Skip silently if `crg_status.json` shows `available: false`.
+
+### Step 3: Iterate Rounds (3 default, configurable)
+Each round: **3a-evaluate → 3b-score → 3c-verify → 3d-checkpoint → 3e-early-stop → 3f-improve**
+
+**3a. Evaluate Each Enabled Dimension**
+- Run per-dimension evaluation: tool-first hierarchy (tool score + LLM score)
+- Reconcile: min(tool_score, llm_score) to prevent optimism bias
+- Evidence requirement: every finding must have evidence (tool output or code change)
+- **Every finding → written to issue registry** via `scripts/issue_tracker.py add`
+  - Idempotent: same finding yields same ID; repeats are de-duplicated
+  - Each issue carries: severity (critical/high/medium/low/info), dimension, file, line, evidence
+- Output: per-dim JSON with scores, findings, tool outputs
+
+**3b. Compute Weighted Score**
+- Aggregate per-dim scores with normalized weights
+- Calculate overall_score (0-100)
+- Surface `open_critical_count`, `open_high_count`, `open_medium_count` from registry
+- Identify failing dimensions sorted by impact (gap × weight)
+- Output: score JSON with breakdown, failing dims, `meets_target`, `quality_complete`
+
+**3c. Verify Round (Anti-Bias Check)**
+- Deterministic verification: compare pre/post tool outputs + git diffs
+- Cap unsupported claims: Δ > 10 without evidence requires ≥3 lines of diff
+- Surface regressions with revert protocol
+- Output: verified.json (use for downstream decisions, not raw scores)
+
+**3d. Checkpoint Round**
+- Snapshot: round_<n>.json with all scores, findings, deltas (via `checkpoint.py`)
+- Mark improvements per dimension
+- Persist `issue_registry.json` snapshot into round folder for audit
+- **Execute: `git tag round-<n>` on the target repo** (not automatic — Agent 执行)
+- Changes remain local only — no automatic `git push` to remote
+- Output: markdown summary for dashboard
+
+> **Commit timing:**
+> - Per-fix: one `git commit` per issue fixed (in Step 3f, called by Agent)
+> - Per-round: one `git tag round-<n>` (in Step 3d, called by Agent)
+> - Never automatic push — user decides when to push to remote
+
+**3e. Early-Stop Check (Issue-Driven)**
+
+```
+critical_open = registry.summary().open_critical
+high_open     = registry.summary().open_high
+
+IF overall_score >= score_gate AND critical_open == 0 AND high_open == 0:
+    → stop: quality_complete = true  (真正完成)
+
+ELIF overall_score >= score_gate AND (critical_open > 0 OR high_open > 0):
+    → continue: score passed but unresolved critical/high issues remain
+    → DO NOT stop — this is the exact anti-pattern we guard against
+
+ELIF saturation_check(registry, current_round, saturation_rounds=3) == true
+     AND no score improvement in last round:
+    → stop: plateau reached, remaining issues marked deferred
+    → emit deferred_fixes.md for human review
+
+ELSE:
+    → proceed to 3f
+```
+
+Saturation detection — **Agent must call this explicitly**:
+```bash
+python3 scripts/issue_tracker.py saturation \
+  .sessi-work/issue_registry.json <current_round>
+# exits 0 (not saturated) or 1 (saturated — no new issues for 3 consecutive rounds)
+```
+Returns true when no NEW issues were recorded for N consecutive rounds (default: 3).
+If saturated AND no score improvement from the previous round → stop and emit deferred_fixes.md.
+
+**3f. Improve (Issue-Driven)**
+
+Input is the **open-issues queue**, not failing dimensions:
+
+```
+open = issue_tracker.open_issues(registry)  # sorted by severity, then round_found
+
+Priority order:
+  1. ALL open critical issues   (regardless of dimension score)
+  2. ALL open high issues       (regardless of dimension score)
+  3. Open medium issues in failing dimensions (score < target)
+  4. Open low issues if time budget allows
+```
+
+For each fix:
+- Run dimension tool pre/post → revert if no measurable improvement
+- On success: `issue_tracker.py fix <id> <round> "<commit_sha>"`
+- On intentional skip: `issue_tracker.py defer <id> <round> "<reason>"` (reason required)
+- Guardrails: never weaken tests, broaden exception handling, add @ts-ignore
+- One commit per fix
+- Loop to 3a
+
+### Step 4: Final Report
+
+Full-transparency report — see `prompts/final_report.md` for the protocol.
+Auto-generated from issue registry + round data + git log:
+
+```bash
+python3 scripts/report_gen.py \
+  <repo_path> \
+  .sessi-work \
+  .sessi-work/issue_registry.json \
+  <score_gate> \
+  .sessi-work/final_report.md
+```
+
+**Mandatory sections:**
+
+1. **Trajectory** — per-dimension score delta across all rounds.
+2. **Fixed Issues** — `report.fixed_count`, grouped by dimension with commit SHAs.
+3. **Accepted Risks** (`report.accepted_risks`) — deferred + wontfix issues,
+   rendered as a table with severity, dimension, message, and the 4-part reason:
+
+   ```markdown
+   ## Accepted Risks / Not Fixed
+
+   | ID | Severity | Dimension | Issue | Reason |
+   |----|----------|-----------|-------|--------|
+   | abc1234 | low | architecture | Circular dep in util | severity=low; occurrence=rare (only on cold start); impact=negligible (self-healing); cost=high (would require arch split) |
+   ```
+
+   This is the audit trail: every low-value issue that was **consciously not fixed**
+   shows here, so nothing disappears silently.
+
+4. **Still Open** (`report.open`) — any issue that is still open at end-of-run.
+   If this contains anything of severity ≥ medium, the recommendation is `partial`.
+5. **Recommendation** — one of:
+   - `pass` — `quality_complete = true` AND no open ≥ medium issues
+   - `pass-with-risks` — `quality_complete = true` AND only accepted_risks remain
+   - `partial` — `max_rounds` reached with open ≥ medium issues
+   - `fail` — regressions detected or score dropped below baseline
+6. **Evidence** — citations to commits (`git log --oneline`) and tool outputs.
 
 ---
 
-## CRG 整合（若可用）
+## Default Configuration
 
-CRG 提供結構智慧：hub nodes、community cohesion、dead code、架構弱點檢測。
-結果寫入 `.sessi-work/crg_reconnaissance.json` 和 `crg_metrics.json`。
-
-若 CRG 不可用，框架自動降級，只做 tool-only 評估。
-
----
-
-## Anti-Bias 防禦
-
-1. `score = min(tool_score, llm_score)` — tool 是 ground truth
-2. 每個 finding 必須有 tool output 證據
-3. 每個 fix 前後執行 tool 驗證，確認改善才 commit
-4. Δ > 10 無 git diff 證據 → 最多只給 +3
-5. 分數下降 → 觸發 revert protocol
-6. CRG structural drift — 新 hub nodes 或 risk_score 跳 > 0.2 → 自動註冊 issue
+- **Rounds:** 3 (max)
+- **Score gate:** 85/100 (minimum — not a completion goal)
+- **Early-stop:** issue-driven (score_gate AND zero open critical/high)
+- **Saturation rounds:** 3 (stop if no new issues found for 3 rounds)
+- **Commit strategy:** one per fix
+- **Evidence threshold:** 10 points
+- **Bias cap:** Δ +3 without diff evidence
 
 ---
 
-## Issue Registry
+## Tool Hierarchy
 
-狀態生命週期：`open` → `fixed` | `deferred` | `wontfix`
+```
+final_score = min(tool_score, llm_score)
+```
 
-優先順序：**severity-first**，不是 score-first。
-一個 dimension 可能已達 target，但若有 open critical/high issue 仍必須處理。
+This prevents LLM from inflating scores when tools say otherwise.
 
 ---
 
-## 輸出檔案
+## Dimension System
+
+**12 Core Dimensions (all enabled by default):**
+
+| Dimension | Tool | Weight | Target | Description |
+|-----------|------|--------|--------|-------------|
+| linting | pylint | 0.06 | 95 | Python lint and style issues |
+| type_safety | mypy | 0.10 | 95 | Static type checking |
+| test_coverage | pytest --cov | 0.13 | 80 | Code coverage by tests |
+| security | bandit | 0.10 | 90 | Security vulnerability scanning |
+| performance | (custom) | 0.07 | 80 | Performance anti-patterns |
+| architecture | cloc + CRG | 0.07 | 80 | Code structure and modularity |
+| readability | radon | 0.06 | 85 | Code complexity metrics |
+| error_handling | (grep-based) | 0.09 | 85 | Exception handling patterns |
+| documentation | (grep-based) | 0.10 | 85 | Docstring coverage |
+| secrets_scanning | gitleaks | 0.08 | 100 | Hardcoded secrets detection |
+| mutation_testing | (skip) | 0.08 | 70 | Mutation testing coverage |
+| license_compliance | scancode | 0.06 | 95 | License header compliance |
+
+**5 Extended Dimensions (optional, disabled by default):**
+
+| Dimension | Tool | Weight | Target |
+|-----------|------|--------|--------|
+| property_testing | (custom) | 0.07 | 75 |
+| fuzzing | (custom) | 0.08 | 70 |
+| accessibility | (custom) | 0.06 | 85 |
+| observability | (custom) | 0.05 | 80 |
+| supply_chain_security | (custom) | 0.06 | 80 |
+
+---
+
+## Output Structure
 
 ```
 .sessi-work/
-├── quality_state.json        ← 當前狀態
-├── crg_status.json         ← CRG 可用性
-├── crg_reconnaissance.json ← CRG 9 commands 結果
-├── crg_metrics.json        ← 結構化 metrics
-├── issue_registry.json      ← Issue 追蹤
-└── round_<n>/
-    ├── scores/             ← 12 個 dimension JSON
-    ├── overall_score.json  ← 3b 輸出
-    ├── verified.json      ← 3c 輸出
-    ├── round_<n>.json    ← 3d 快照
-    └── round_<n>.md      ← markdown 摘要
+├── quality_state.json       ← current state (for resume)
+├── config.json              ← resolved config
+├── crg_status.json         ← CRG availability + node count
+├── crg_reconnaissance.json ← 9 CRG commands output
+├── crg_metrics.json        ← structured metrics (6 deep points)
+├── issue_registry.json      ← persistent issue tracking
+├── round_1/
+│   ├── scores/
+│   │   ├── linting.json
+│   │   ├── type_safety.json
+│   │   └── ... (all 12 dimensions)
+│   ├── tools/
+│   │   └── linting.txt (raw tool output)
+│   ├── round_1.json (snapshot)
+│   └── round_1.md (summary)
+├── round_2/
+├── round_3/
+└── final_report.md
+```
+
+---
+
+## Anti-Bias Defenses
+
+1. **Tool-first hierarchy:** Claims capped by tool scores
+2. **Evidence requirement:** Every finding needs tool output or code diff
+3. **Per-fix re-verification:** Revert if tool shows no improvement
+4. **Deterministic verification:** quantitative comparison pre/post
+5. **Regression detection:** surface changes that hurt dimensions
+6. **Path heuristics:** prevent undetected regressions
+7. **Structural drift detection (CRG):** catches architectural regressions
+   that dimension tools cannot see — new hub nodes, expanded test gaps,
+   risk-score jumps across rounds
+
+---
+
+## Code Review Graph Integration
+
+When CRG is installed, **four integration points** activate automatically
+(6 with deep-integration formulas — see `scripts/crg_analysis.py`):
+
+**6 Deep Integration Points:**
+
+| # | Signal | Deterministic output | Consumer |
+|---|--------|----------------------|-----------|
+| 1 | `risk_score` | `eval_depth` = `deep` / `standard` / `fast` | evaluate_dimension.md |
+| 2 | community cohesion | architecture sub-score 0–100 | score.py (min-with-tool) |
+| 3 | flow coverage | error_handling sub-score 0–100 | score.py (min-with-tool) |
+| 4 | dead-code ratio | `escalate_severity` low→medium if >5% | improvement_plan.md |
+| 5 | hub fan-in | severity bucket critical/high/medium/low | evaluate_dimension.md |
+| 6 | suggested questions | auto-seeded registry issues via severity map | crg_reconnaissance.md |
+
+All thresholds are explicit and ENV-overridable (`CRG_RISK_DEEP`,
+`CRG_COHESION_HEALTHY`, etc.) — see `prompts/crg_reconnaissance.md §Step 11` for
+the full table. Inspect effective values:
+
+```bash
+python3 scripts/crg_analysis.py thresholds
+```
+
+The contract for sub-score folding is `score = min(tool_score, crg_score)` —
+CRG can **only pull a dimension score down**, never inflate it. This
+prevents the failure mode where a lint-clean repo hides broken architecture.
+
+**CRG Availability Check:**
+- `code-review-graph` binary installed at `/opt/homebrew/bin/code-review-graph`
+- Graph built: `.code-review-graph/graph.db` exists
+- If graph not built: `setup_target.py` auto-builds it (no manual step needed)
+
+Framework **gracefully degrades** without CRG — all integration points skip
+silently; only token efficiency and structural verification are lost.
+
+---
+
+## Prompts (Agent reads and follows these, not executed as commands)
+
+- `prompts/evaluate_dimension.md` — Agent follows this protocol for each dimension
+- `prompts/improvement_plan.md` — Agent follows this to plan and apply fixes
+- `prompts/verify_round.md` — Agent follows this for cross-dimension regression checks
+- `prompts/crg_reconnaissance.md` — Agent follows this for CRG structural analysis
+- `prompts/final_report.md` — Agent follows this to produce the final report
+
+---
+
+## CLI Scripts (called by Agent, not by human directly)
+
+```bash
+# Step 1 — Agent calls these to resolve config + target
+python3 scripts/config_loader.py config.yaml
+python3 scripts/setup_target.py <github-url-or-local-path>
+
+# Step 2.5 — Agent calls this to run CRG reconnaissance
+python3 scripts/crg_analysis.py run_reconnaissance <repo_path> <work_dir>
+
+# Step 3a — Agent calls this to evaluate all dimensions
+python3 scripts/dimension_executor.py --all --repo <repo_path> --work-dir .sessi-work
+
+# Step 3b — Agent calls this to compute weighted score
+python3 scripts/score.py .sessi-work/round_<n> config.json
+
+# Step 3c — Agent calls this for anti-bias verification
+python3 scripts/verify.py .sessi-work/round_<n>/result.json .sessi-work/round_<n> <repo_path>
+
+# Step 3d — Agent calls this to snapshot the round
+python3 scripts/checkpoint.py round <n> scores.json <overall_score>
+
+# Step 3e — Agent calls this for saturation check
+python3 scripts/issue_tracker.py saturation .sessi-work/issue_registry.json <current_round>
+
+# Step 4 — Agent calls this to generate the final report
+python3 scripts/report_gen.py <repo_path> .sessi-work .sessi-work/issue_registry.json <score_gate> .sessi-work/final_report.md
 ```
 
 ---
 
 ## Graceful Degradation
 
-| 缺少組件 | 行為 |
-|---------|------|
-| CRG 未安裝 | 跳過結構分析，tool-only 評估 |
-| Tool 未安裝 | Dimension 回傳 `status: "skip"`, score = 100 |
-| Config 未找到 | 使用內建預設值 |
-| Issue tracker 不可用 | 純分數計算，無 issue 追蹤 |
+| Missing component | Behavior |
+|-------------------|----------|
+| CRG not installed | Skip structural analysis, tool-only evaluation |
+| Tool not installed | Dimension returns `status: "skip"`, score = 100 |
+| Config not found | Use built-in defaults |
+| Issue tracker unavailable | Pure score calculation, no issue tracking |
 
 ---
 
@@ -171,6 +423,7 @@ CRG 提供結構智慧：hub nodes、community cohesion、dead code、架構弱�
 - Tool not found → `status: "skip"`, score = 100
 - Tool timeout → `status: "error"`, score = 0
 - Score computation failure → fallback to direct tool score average
+- CRG graph build failure → log warning, continue without CRG
 
 ---
 
@@ -200,3 +453,12 @@ Agent 完成後，向人類報告：
 
 📁 報告位置：.sessi-work/final_report.md
 ```
+
+---
+
+## References
+
+- Framework: Based on Karpathy's autoresearch pattern
+- Quality model: Harness Engineering 12-dimension weighted scoring
+- Implementation: OpenClaw skill with Python orchestration + LLM evaluation steps
+- CRG: [code-review-graph](https://github.com/code-review-graph) for structural analysis
