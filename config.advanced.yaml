@@ -1,0 +1,248 @@
+# Harness Quality Framework - Advanced Configuration
+# 12 core + 5 extended dimensions
+# Use for: Critical systems, compliance-required projects, maximum quality assurance
+
+version: "1.0"
+
+quality:
+  score_gate: 85          # Minimum overall score (0-100) — NOT a completion target
+  max_rounds: 3
+  early_stop: true        # Issue-driven: score_gate met AND zero open critical/high
+  saturation_rounds: 3    # Stop if no NEW issues found for N consecutive rounds
+  commit_per_fix: true
+
+workspace:
+  work_dir: ".sessi-work"
+  preserve_git: true
+
+# All 17 dimensions (12 core + 5 extended)
+dimensions:
+
+  # === CORE DIMENSIONS (12) ===
+  # All enabled by default. Weights auto-normalized by config_loader.py.
+
+  linting:
+    enabled: true
+    weight: 0.06
+    target: 95
+    tools:
+      - eslint
+      - pylint
+      - clippy
+      - golangci-lint
+
+  type_safety:
+    enabled: true
+    weight: 0.10
+    target: 95
+    tools:
+      - pyright
+      - eslint
+      - rustc
+      - javac
+
+  test_coverage:
+    enabled: true
+    weight: 0.13
+    target: 80
+    tools:
+      - coverage
+      - nyc
+      - tarpaulin
+      - jacoco
+
+  security:
+    enabled: true
+    weight: 0.10
+    target: 90
+    tools:
+      - bandit
+      - npm-audit
+      - cargo-audit
+      - git-secrets
+
+  performance:
+    enabled: true
+    weight: 0.07
+    target: 80
+    tools:
+      - pytest-benchmark
+      - lighthouse
+      - cargo-criterion
+      - jmh
+
+  architecture:
+    enabled: true
+    weight: 0.07
+    target: 80
+    tools:
+      - sonarqube
+      - codeql
+      - architecture-tests
+
+  readability:
+    enabled: true
+    weight: 0.06
+    target: 85
+    tools:
+      - radon
+      - eslint-plugin-sonarjs
+      - clippy
+
+  error_handling:
+    enabled: true
+    weight: 0.09
+    target: 85
+    tools:
+      - custom-checks
+      - pytest
+      - jest
+
+  documentation:
+    enabled: true
+    weight: 0.10
+    target: 85
+    tools:
+      - pydocstyle
+      - jsdoc
+      - rustdoc
+      - javadoc
+
+  secrets_scanning:
+    enabled: true
+    weight: 0.08
+    target: 100
+    tools:
+      - detect-secrets
+      - gitleaks
+
+  mutation_testing:
+    enabled: true
+    weight: 0.08
+    target: 70
+    time_budget_seconds: 300  # 5-min cap per round
+    tools:
+      - mutmut
+      - stryker
+
+  license_compliance:
+    enabled: true
+    weight: 0.06
+    target: 95
+    tools:
+      - scancode-toolkit
+      - fossa
+
+  # === EXTENDED DIMENSIONS (5) ===
+  # Disabled by default. Enable individually based on project type.
+
+  property_testing:
+    enabled: false
+    # PREREQUISITES: linting ✓, type_safety >= 90%
+    weight: 0.07
+    target: 75
+    tools:
+      - hypothesis          # Python
+      - fast-check          # JavaScript
+    description: |
+      Generates edge case test data automatically.
+      Finds subtle bugs in business logic.
+
+  fuzzing:
+    enabled: false
+    # PREREQUISITES: security >= 85%, error_handling >= 80%
+    weight: 0.08
+    target: 70
+    tools:
+      - atheris             # Python (requires 3.9+)
+      - jazzer              # Java/JVM
+    description: |
+      Continuous input mutation for crash discovery.
+      Critical for parsers, APIs, security-sensitive code.
+
+  accessibility:
+    enabled: false
+    # PREREQUISITES: readability >= 80% — UI/web projects only
+    weight: 0.06
+    target: 85
+    tools:
+      - pa11y
+      - axe-core
+    description: |
+      Detects WCAG 2.1 Level AA violations.
+      Mandatory for public-facing UIs; not applicable to backends/CLIs.
+
+  observability:
+    enabled: false
+    # PREREQUISITES: None
+    weight: 0.05
+    target: 80
+    tools:
+      - syft
+      - grype
+    description: |
+      SBOM generation + vulnerability scanning.
+      Production readiness: logging, metrics, tracing gaps.
+
+  supply_chain_security:
+    enabled: false
+    # PREREQUISITES: security >= 85%
+    weight: 0.06
+    target: 80
+    tools:
+      - cosign
+    description: |
+      Artifact signature verification and provenance.
+      Required for published packages and CI/CD pipelines.
+
+# Score calculation (same across core and extended)
+scoring:
+  reconcile_method: "min"
+  evidence_threshold: 10
+  tool_diff_min_lines: 3
+  cap_unsupported_delta: 3
+  regression_detection: true
+  revert_on_regression: true
+
+evaluation:
+  tool_first: true
+  evidence_required: true
+  per_dimension_depth: "thorough"
+  explain_gaps: true
+
+# LLM Routing
+llm_routing:
+  enabled: true
+  tier1:
+    provider: gemini
+    model: gemini-2.5-flash
+    dimensions: [linting, type_safety, test_coverage,
+                 secrets_scanning, license_compliance, mutation_testing,
+                 property_testing, fuzzing, accessibility,
+                 observability, supply_chain_security]
+  tier2:
+    provider: gemini
+    model: gemini-2.5-flash
+    dimensions: [security]
+  tier3:
+    provider: claude_native
+    model: claude-sonnet-4-5      # override: HARNESS_CLAUDE_MODEL
+    dimensions: [architecture, readability, error_handling,
+                 documentation, performance]
+  improve:
+    provider: claude_native
+    model: claude-sonnet-4-5      # override: HARNESS_IMPROVE_MODEL
+  token_budget:
+    tier1_input_max: 8000
+    tier2_input_max: 10000
+    tier3_input_max: 20000
+
+# Extended dimensions setup
+extended_dims_setup: |
+  Extended dimensions require additional tool installation.
+  See docs/INSTALL_EXTENDED_DIMS.md for detailed steps.
+
+  Quick install:
+  - ./scripts/install_extended_tools.sh --all
+
+  After install, change 'enabled: false' to 'enabled: true' for desired dims.
