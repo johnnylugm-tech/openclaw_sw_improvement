@@ -1,0 +1,54 @@
+version: "1.0"
+
+quality:
+  score_gate: 85          # Minimum overall score to pass
+  max_rounds: 3           # Maximum improvement rounds
+  early_stop: true        # Stop when quality_complete=true
+  saturation_rounds: 3    # Stop after N rounds with no new issues
+  commit_per_fix: true    # One commit per fix (traceability)
+
+workspace:
+  work_dir: ".sessi-work"
+  preserve_git: true      # Don't re-init existing git repos
+
+dimensions:
+  linting:           {enabled: true,  weight: 0.06, target: 95}
+  type_safety:        {enabled: true,  weight: 0.10, target: 95}
+  test_coverage:      {enabled: true,  weight: 0.13, target: 80}
+  security:          {enabled: true,  weight: 0.10, target: 90}
+  performance:        {enabled: true,  weight: 0.07, target: 80}
+  architecture:      {enabled: true,  weight: 0.07, target: 80}
+  readability:        {enabled: true,  weight: 0.06, target: 85}
+  error_handling:    {enabled: true,  weight: 0.09, target: 85}
+  documentation:     {enabled: true,  weight: 0.10, target: 85}
+  secrets_scanning:   {enabled: true,  weight: 0.08, target: 100}
+  mutation_testing:  {enabled: true,  weight: 0.08, target: 70, time_budget_seconds: 300}
+  license_compliance: {enabled: true, weight: 0.06, target: 95}
+
+  # Extended dimensions (disabled by default)
+  property_testing:   {enabled: false, weight: 0.07, target: 75}
+  fuzzing:            {enabled: false, weight: 0.08, target: 70}
+  accessibility:      {enabled: false, weight: 0.06, target: 85}
+  observability:      {enabled: false, weight: 0.05, target: 80}
+  supply_chain_security: {enabled: false, weight: 0.06, target: 80}
+
+scoring:
+  reconcile_method: "min"           # tool_first: min(tool, llm)
+  evidence_threshold: 10            # Δ > 10 requires evidence
+  tool_diff_min_lines: 3            # Min git diff lines for evidence
+  cap_unsupported_delta: 3          # Max gain without evidence
+  regression_detection: true
+  revert_on_regression: true
+
+evaluation:
+  tool_first: true
+  evidence_required: true
+  per_dimension_depth: "thorough"
+  explain_gaps: true
+
+llm_routing:
+  enabled: true
+  model: "minimax/MiniMax-M2.7"    # Unified model for all dimensions
+  token_budget:
+    input_max: 20000
+    output_max: 4000
