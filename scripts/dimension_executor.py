@@ -77,9 +77,9 @@ DIMENSIONS = {
         "weight": 0.08,
     },
     "mutation_testing": {
-        "tool": None,
-        "command": None,
-        "score_type": "skip",
+        "tool": "pytest",
+        "command": ["pytest", "{target}", "--gremlins", "--gremlins-executor=subprocess", "-q"],
+        "score_type": "gremlins_json",
         "weight": 0.08,
     },
     "license_compliance": {
@@ -209,6 +209,28 @@ def _parse_gitleaks_json(stdout: str) -> dict:
     return findings
 
 
+def _parse_gremlins_json(stdout: str) -> dict:
+    """Parse pytest-gremlins JSON output (from coverage/gremlins/gremlins.json)."""
+    findings = []
+    try:
+        data = json.loads(stdout)
+        total = data.get("total", 0)
+        killed = data.get("killed", 0)
+        # Compute kill rate
+        kill_rate = (killed / total * 100) if total > 0 else 0
+        # Score based on kill rate (target ~70%)
+        score = min(100, kill_rate)
+        findings.append({
+            "file": "mutation_summary",
+            "line": 0,
+            "message": f"Mutation testing: {killed}/{total} killed ({kill_rate:.1f}%)",
+            "severity": "info",
+        })
+    except json.JSONDecodeError:
+        pass
+    return findings
+
+
 def _compute_tool_score(findings: list, dimension: str) -> int:
     """Compute 0-100 tool score from findings."""
     if dimension == "linting":
@@ -240,6 +262,16 @@ def _compute_tool_score(findings: list, dimension: str) -> int:
         # radon cc: lower complexity = higher score
         # For now, score based on absence of findings
         return 100
+    elif dimension == "mutation_testing":
+        # Extract kill rate from findings message
+        for f in findings:
+            msg = f.get("message", "")
+            if "killed" in msg and "%" in msg:
+                import re
+                m = re.search(r'\(([\d.]+)%\)', msg)
+                if m:
+                    return min(100, float(m.group(1)))
+        return 0
     else:
         count = len(findings)
         if count == 0:
@@ -292,6 +324,8 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
         findings = _parse_bandit_json(stdout)
     elif config.get(dimension, {}).get("score_type") == "gitleaks_json":
         findings = _parse_gitleaks_json(stdout)
+    elif config.get(dimension, {}).get("score_type") == "gremlins_json":
+        findings = _parse_gremlins_json(stdout)
     else:
         # Count-based scoring
         lines = stdout.strip().split("\n") if stdout.strip() else []
