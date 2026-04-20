@@ -43,7 +43,8 @@ def validate_email(email):
 
 ### Tools
 
-- **mutmut** (Python) — pytest-compatible
+- **pytest-gremlins** (Python) — pytest-native, subprocess executor, Python 3.14+ compatible
+- **mutmut** (Python) — pytest-compatible, but has Python 3.14 compatibility issues with async tests
 - **stryker** (JavaScript/TypeScript) — jest/mocha compatible
 
 ### Prerequisites
@@ -73,8 +74,24 @@ mutation_score = (killed_mutations / total_mutations) × 100
 mutation_testing:
   enabled: true
   target: 70          # 70% mutation kill rate
-  tools: [mutmut, stryker]
+  tools: [pytest-gremlins, stryker]
 ```
+
+### pytest-gremlins Quick Start
+
+```bash
+# Install
+pip install pytest-gremlins
+
+# Run (subprocess executor required for async tests)
+pytest tests/ --gremlins --gremlins-executor=subprocess -q
+
+# Check results
+cat coverage/gremlins/gremlins.json
+```
+
+> ⚠️ **Important:** Use `--gremlins-executor=subprocess`. The `inprocess` executor
+> does not correctly hook async functions and will report 0% kill rate.
 
 ---
 

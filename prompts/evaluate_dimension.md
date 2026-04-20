@@ -37,7 +37,7 @@ Run all tools for this dimension. Save raw output:
 | documentation | `grep -r '"""' <target> --include="*.py" \| wc -l` |
 | license_compliance | `scancode --output=json <target>` |
 | performance | skip |
-| mutation_testing | skip |
+| mutation_testing | `pytest tests/ --gremlins --gremlins-executor=subprocess -q` |
 
 ---
 

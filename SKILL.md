@@ -273,7 +273,7 @@ This prevents LLM from inflating scores when tools say otherwise.
 | error_handling | (grep-based) | 0.09 | 85 | Exception handling patterns |
 | documentation | (grep-based) | 0.10 | 85 | Docstring coverage |
 | secrets_scanning | gitleaks | 0.08 | 100 | Hardcoded secrets detection |
-| mutation_testing | (skip) | 0.08 | 70 | Mutation testing coverage |
+| mutation_testing | pytest --gremlins --gremlins-executor=subprocess | 0.08 | 70 | Mutation testing coverage |
 | license_compliance | scancode | 0.06 | 95 | License header compliance |
 
 **5 Extended Dimensions (optional, disabled by default):**
