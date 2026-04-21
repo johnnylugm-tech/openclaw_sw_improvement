@@ -162,7 +162,7 @@ Complete implementation of auto-research-style quality improvement framework wit
 
 **New 5 (v3.1) — targeting: laziness, shortcuts, hallucination, self-congratulation:**
 8. **Execution Contract** — Behavioral red lines declared at prompt start; skip = result invalid
-9. **Devil's Advocate** — Gemini Flash adversarially challenges Tier 3 before score write
+9. **Devil's Advocate** — Secondary LLM call adversarially challenges Tier 3 before score write
 10. **High-Score Confirmation Gate** — `llm_score ≥ 85` requires 3-part proof or forced cap to 80
 11. **Fix Verification Enforcement Gate** — `mark_fixed()` requires `commit_sha` + `tool_rerun_path`
 12. **Self-Consistency Uncertainty Gate** — `verify.py` flags Δ > 15 / divergence / bypass of Step 2c
@@ -236,7 +236,7 @@ harness-quality-framework/
 ```bash
 cp config.example.yaml config.yaml
 ```
-In Claude Code conversation: `"Run quality improvement on /path/to/repo"`
+In the conversation: `"Run quality improvement on /path/to/repo"`
 **Time:** 30-60 min (3 rounds × 10-20 min/round)
 
 ### 2. Extended Framework (All 17 Dimensions)
@@ -250,7 +250,7 @@ In Claude Code conversation: `"Run quality improvement on /path/to/repo"`
 cp config.advanced.yaml config.yaml
 # Edit config.yaml: set 'enabled: true' for each dimension you want
 ```
-In Claude Code conversation: `"Run quality improvement using config.advanced.yaml"`
+In the conversation: `"Run quality improvement using config.advanced.yaml"`
 **Time:** 90-150 min (3 rounds × 30-50 min/round depending on dimensions enabled)
 
 ### 3. Custom Configuration
@@ -336,7 +336,7 @@ python3 scripts/config_loader.py config.yaml | jq '.dimensions | keys'
 
 - Framework design: Based on Karpathy's autoresearch pattern (`github.com/karpathy/autoresearch`)
 - Quality model: Extended from Harness Engineering framework (base model: 12 core dimensions)
-- Implementation: Claude Code skill with Python orchestration + LLM evaluation steps
+- Implementation: OpenClaw skill with Python orchestration + LLM evaluation steps
 - Anti-bias: Research on LLM self-evaluation bias in ML systems
 
 ## Conclusion

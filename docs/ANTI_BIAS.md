@@ -216,13 +216,13 @@ the middle of long instructions.
 ### 9. Devil's Advocate Cross-Check (DA)
 
 After completing a Tier 3 evaluation and before writing the score file,
-Claude sends its findings to **Gemini Flash** as a challenger — a different
+Claude sends its findings to **a secondary LLM call** as a challenger — a different
 model that has no stake in Claude's conclusions.
 
 **Trigger:** Tier 3 dimensions (architecture, readability, error_handling,
 documentation, performance) after Step 2a CRG analysis.
 
-**Gemini Flash prompt:** "你是挑剔的 code reviewer，主動反駁這份評估"  
+**Secondary LLM prompt:** "你是挑剔的 code reviewer，主動反駁這份評估"  
 → returns structured JSON: `missed_issues`, `overestimation_risk`, `da_verdict`
 
 **Deterministic scoring adjustments (not LLM-discretionary):**

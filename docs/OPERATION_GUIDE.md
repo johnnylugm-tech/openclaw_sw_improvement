@@ -1,6 +1,6 @@
 # Harness Quality Framework — Complete Operation Guide
 
-End-to-end workflow with CLI commands and Claude Code MCP tool interactions.
+End-to-end workflow with CLI commands and Agent MCP tool interactions.
 
 ---
 
@@ -9,9 +9,9 @@ End-to-end workflow with CLI commands and Claude Code MCP tool interactions.
 ```bash
 # One-time setup (if not done):
 cd /Users/johnny/Projects/harness-quality-framework
-code-review-graph install --platform claude-code --repo . -y
+code-review-graph install --platform openclaw --repo . -y
 
-# Restart Claude Desktop app to load CRG MCP tools
+# Restart the application to load CRG MCP tools
 # Graph build is automatic — setup_target.py detects and builds on first run
 ```
 
@@ -64,7 +64,7 @@ Token cost: ~3,900 (vs ~10,000+ for blind file reading).
 
 ---
 
-### Phase 2: Evaluate Each Dimension (Claude Code MCP + CLI, ~15 min)
+### Phase 2: Evaluate Each Dimension (Agent + CLI, ~15 min)
 
 **For each enabled dimension (12 core, or subset if early-stop triggered):**
 
@@ -76,11 +76,11 @@ python3 scripts/llm_router.py <dimension> [tool_output.txt]
 
 Read `tier` and `provider`:
 - **Tier 1** (linting, type_safety, test_coverage, secrets_scanning, license_compliance, mutation_testing)
-  → Use Gemini Flash via `mcp__gemini-cli__ask-gemini`
+  → Use default LLM (agent)
 - **Tier 2** (security)
-  → Use Gemini Flash
+  → Use default LLM (agent)
 - **Tier 3** (architecture, readability, error_handling, documentation, performance)
-  → **Use Claude Code + CRG MCP tools** (this session)
+  → **Use Agent + CRG MCP tools** (this session)
 
 #### Step 2.2a: Run tools (CLI)
 
@@ -91,16 +91,16 @@ pylint src/ --output-format=json 2>&1 > .sessi-work/round_<n>/tools/linting.txt
 # Save to file for downstream reference
 ```
 
-#### Step 2.2b: Evaluate (Gemini Flash for Tier 1/2, Claude native for Tier 3)
+#### Step 2.2b: Evaluate (Default LLM for Tier 1/2, Agent reasoning for Tier 3)
 
-**IF Tier 1/2:** Call Gemini Flash via MCP tool (automated)
+**IF Tier 1/2:** Call the default LLM (automated)
 
-**IF Tier 3:** Use Claude Code **+ CRG MCP tools first**
+**IF Tier 3:** Use the Agent **+ CRG MCP tools first**
 
-In Claude Code session, query the CRG knowledge graph BEFORE reading source code:
+In the session, query the CRG knowledge graph BEFORE reading source code:
 
 ```
-# In Claude Code: use /mcp command or direct tool calls
+# Use the MCP tool calls or the Agent's CRG tool interface
 
 For architecture dimension:
   /mcp get_hub_nodes              → most-connected functions (hotspots)
@@ -127,16 +127,17 @@ For documentation:
   /mcp get_hub_nodes              → highest-priority doc gaps
 ```
 
-Then use Claude's **LLM score** based on:
+Then use the Agent's **LLM score** based on:
 - CRG structural data (cheap, returned as JSON)
 - 2–5 spot-reads of specific files CRG flagged
 - **Never** read entire codebase
 
 **Token target:** -30 to -50% vs. pure-code-reading for Tier 3.
 
-#### Step 2.3: Write score file (Claude Code output → CLI save)
+#### Step 2.3: Write score file (Agent output → CLI save)
 
-Claude Code writes JSON to `.sessi-work/round_<n>/scores/<dimension>.json`:
+
+The Agent writes JSON to `.sessi-work/round_<n>/scores/<dimension>.json`:
 
 ```json
 {
@@ -235,7 +236,7 @@ git commit -m "checkpoint: round <n>"
 
 ---
 
-### Phase 6: Early-Stop Check (Claude Code logic)
+### Phase 6: Early-Stop Check (Agent logic)
 
 **Pseudo-code (SKILL.md Step 3e):**
 
@@ -260,7 +261,7 @@ ELSE:
 
 ---
 
-### Phase 7: Improvement (Claude Code + CLI, ~30 min per fix)
+### Phase 7: Improvement (Agent + CLI, ~30 min per fix)
 
 Load open-issue queue (severity-sorted):
 
@@ -280,7 +281,7 @@ python3 scripts/llm_router.py <dimension>
 # Run the tool for <dimension> → save baseline score
 ```
 
-#### Step 7.2: Apply fix (Claude Code)
+#### Step 7.2: Apply fix (Agent)
 
 Minimal, targeted change in the codebase addressing the specific issue.
 
@@ -360,7 +361,7 @@ the fix improved the score.
 
 ---
 
-### Phase 8: Final Report (Claude Code + CLI, ~10 min)
+### Phase 8: Final Report (Agent + CLI, ~10 min)
 
 After all rounds or early-stop, generate the complete quality report.
 
@@ -384,7 +385,7 @@ Outputs 7 mandatory sections:
 6. Still Open
 7. Evidence Trail (git log)
 
-#### Step 8.2: Add narrative (Claude Code)
+#### Step 8.2: Add narrative (Agent)
 
 Claude adds 3 sections on top:
 8. Root-Cause Themes
@@ -409,7 +410,7 @@ If output is non-empty, go back to Phase 7 and update registry with commit SHAs.
 
 ---
 
-## Summary Table: CLI vs Claude Code
+## Summary Table: CLI vs Agent
 
 | Phase | Tool | Command | Output |
 |-------|------|---------|--------|
@@ -445,12 +446,12 @@ If output is non-empty, go back to Phase 7 and update registry with commit SHAs.
 CLI: llm_router.py architecture
   → returns tier=3, provider=claude
 
-Claude Code:
+The Agent:
   /mcp get_hub_nodes              ← query graph
   /mcp get_architecture_overview  ← more graph
   /mcp semantic_search_nodes "circular"  ← targeted search
   
-  [Claude reads 3 CRG JSON results, spot-reads 2 flagged files]
+  [Agent reads 3 CRG JSON results, spot-reads 2 flagged files]
   
   Write to .sessi-work/round_1/scores/architecture.json:
   {
@@ -466,7 +467,7 @@ CLI: issue_tracker.py add ... ← register findings
 ### Pattern 2: Fix Verification (CLI + CRG safety gate)
 
 ```
-Claude Code:
+The Agent:
   [applies fix to src/util.py]
   
 CLI:
@@ -489,7 +490,7 @@ CLI:
   report_gen.py . .sessi-work issue_registry.json 85 final_report.md
     → Outputs sections 1–7 (structured, deterministic)
 
-Claude Code:
+The Agent:
   [reads final_report.md sections 1–7]
   
   Adds sections 8–10 (narrative, interpretation):
@@ -569,7 +570,7 @@ python3 scripts/report_gen.py /path/to/myapp .sessi-work issue_registry.json 85 
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| CRG tools not showing in Claude Code | Global config not updated | `code-review-graph install --platform claude-code` to global config |
+| CRG tools not showing | Global config not updated | `code-review-graph install --platform openclaw` to global config |
 | `crg_integration.py check` fails | CRG not installed | `pipx install code-review-graph` |
 | Graph shows "Nodes: 0" after session | Auto-build failed | Check `.sessi-work/crg_status.json` for reason; retry: `code-review-graph build --repo .` |
 | Blast radius is always 0.0 | Graph outdated | `code-review-graph update --repo .` |

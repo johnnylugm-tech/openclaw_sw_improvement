@@ -27,8 +27,8 @@ Auto-research-style quality improvement for code repositories. Evaluates code ac
 
 ## How to Run
 
-> **This is a Claude Code skill — it runs entirely in the conversation window.**
-> There is no standalone CLI command. Claude reads `SKILL.md` as its instruction
+> **This is an OpenClaw skill — it runs via the conversation interface.**
+> There is no standalone CLI command. The Agent reads `SKILL.md` as its instruction
 > set and calls the Python scripts interactively.
 
 ### Step 1: Prepare config
@@ -38,7 +38,7 @@ cp config.example.yaml config.yaml
 # Edit config.yaml if needed (score_gate, rounds, model, etc.)
 ```
 
-### Step 2: Open Claude Code and say
+### Step 2: Open the conversation and say
 
 ```
 "Please run the quality improvement skill on /path/to/repo"
@@ -48,7 +48,7 @@ cp config.example.yaml config.yaml
 "Run all 12 quality dimensions, 3 rounds, score gate 85"
 ```
 
-Claude will execute the 4-step process from `SKILL.md` — no further commands needed.
+The Agent will execute the 4-step process from `SKILL.md` — no further commands needed.
 
 ### Advanced: 17 dimensions (core + extended)
 
@@ -63,7 +63,7 @@ cp config.advanced.yaml config.yaml
 # Edit: set 'enabled: true' for desired extended dims
 ```
 
-Then in Claude Code conversation:
+Then in the conversation:
 ```
 "Run quality improvement using config.advanced.yaml on /path/to/repo"
 ```
@@ -185,7 +185,7 @@ See `docs/EXTENDED_DIMENSIONS.md` for detailed guide.
 
 **New layers (v3.1 — counters: laziness, shortcuts, hallucination, self-congratulation):**
 8. **Execution Contract** — behavioral red lines at prompt start
-9. **Devil's Advocate** — Gemini Flash challenges Tier 3 before score write
+9. **Devil's Advocate** — Secondary LLM call challenges Tier 3 before score write
 10. **High-Score Gate** — `llm_score ≥ 85` requires negative space proof or caps at 80
 11. **Fix Verification Gate** — `mark_fixed()` enforces `commit_sha` + `tool_rerun_path`
 12. **Self-Consistency Gate** — flags Δ > 15 with insufficient evidence, tool/LLM divergence
@@ -242,8 +242,8 @@ The framework integrates with **Code Review Graph (CRG)** — 24 of 27 MCP tools
 # Anytime: see CRG status (auto-initialized by framework at session start)
 cat .sessi-work/crg_status.json
 
-# If MCP tools not showing in Claude Code after restart: re-run install
-code-review-graph install --platform claude-code --repo .
+# If MCP tools not showing after restart: re-run install
+code-review-graph install --platform openclaw --repo .
 ```
 
 > **Graph build is automatic** — `setup_target.py` detects if the graph is
@@ -297,10 +297,10 @@ See `docs/INSTALL_EXTENDED_DIMS.md` for detailed per-tool steps.
 
 **First time:**
 ```bash
-# Register CRG MCP tools with Claude Code (one-time)
-code-review-graph install --platform claude-code --repo .
+# Register CRG MCP tools (one-time)
+code-review-graph install --platform openclaw --repo .
 
-# Restart Claude Desktop to load MCP tools
+# Restart the application to load MCP tools
 ```
 
 > **Graph build is automatic** — no need to run `code-review-graph build` manually.
@@ -314,14 +314,14 @@ python3 scripts/verify_tools.py --crg
 # Or after first run: cat .sessi-work/crg_status.json
 ```
 
-### Step 4️⃣: Start in Claude Code
+### Step 4️⃣: Start the conversation
 
 ```bash
 # Copy config (first time only)
 cp config.example.yaml config.yaml
 ```
 
-Then open Claude Code and say:
+Then open and say:
 ```
 "Please run the quality improvement skill on [this repo / path / URL]"
 ```
@@ -338,13 +338,13 @@ python3 scripts/verify_tools.py
 ./scripts/install_extended_tools.sh --high
 
 # Setup CRG (optional, recommended for token savings)
-code-review-graph install --platform claude-code --repo .
-# Restart Claude Desktop (graph is auto-built by framework on first run)
+code-review-graph install --platform openclaw --repo .
+# Restart the application (graph auto-built by framework on first run)
 
 # Prepare config
 cp config.example.yaml config.yaml
 ```
-Then in Claude Code: `"Run quality improvement on /path/to/repo"`
+Then in the conversation: `"Run quality improvement on /path/to/repo"`
 
 ### Scenario 2: Already Have Tools
 
@@ -352,7 +352,7 @@ Then in Claude Code: `"Run quality improvement on /path/to/repo"`
 # Optional: update CRG graph
 code-review-graph update --repo .
 ```
-Then in Claude Code: `"Run quality improvement on /path/to/repo"`
+Then in the conversation: `"Run quality improvement on /path/to/repo"`
 
 ### Scenario 3: Full Setup (Extended Tools + CRG)
 
@@ -360,18 +360,18 @@ Then in Claude Code: `"Run quality improvement on /path/to/repo"`
 # First time only
 python3 scripts/verify_tools.py
 ./scripts/install_extended_tools.sh --all
-code-review-graph install --platform claude-code --repo .
-# Restart Claude Desktop (graph auto-built on first framework run)
+code-review-graph install --platform openclaw --repo .
+# Restart the application (graph auto-built on first framework run)
 
 # Configure with all dimensions
 cp config.advanced.yaml config.yaml
 # Edit: set 'enabled: true' for desired extended dims
 ```
-Then in Claude Code: `"Run quality improvement using config.advanced.yaml"`
+Then in the conversation: `"Run quality improvement using config.advanced.yaml"`
 
 ### Scenario 4: Subsequent Runs
 
-Nothing to install — just open Claude Code and say:
+Nothing to install — just open the conversation and say:
 ```
 "Run another quality improvement round on [repo]"
 ```
@@ -443,7 +443,7 @@ Each dimension score includes:
 cp config.example.yaml config.yaml
 # Edit config.yaml: set max_rounds: 1
 ```
-In Claude Code: `"Run 1 round of quality assessment on /path/to/repo"`
+In the conversation: `"Run 1 round of quality assessment on /path/to/repo"`
 
 ### Example 2: Full Framework (17 dimensions)
 ```bash
@@ -451,7 +451,7 @@ cp config.advanced.yaml config.yaml
 ./scripts/install_extended_tools.sh --all
 # Edit config.yaml: enable desired extended dims
 ```
-In Claude Code: `"Run quality improvement using config.advanced.yaml"`
+In the conversation: `"Run quality improvement using config.advanced.yaml"`
 
 ### Example 3: Custom Targets
 ```bash
@@ -465,19 +465,19 @@ cp config.example.yaml config.yaml
 #   security:
 #     target: 95
 ```
-In Claude Code: `"Run quality improvement — score gate is 90"`
+In the conversation: `"Run quality improvement — score gate is 90"`
 
 ## Architecture
 
-- **SKILL.md** — Execution contract (Claude reads this as its instruction set)
-- **scripts/config_loader.py** — YAML → JSON resolver (called by Claude)
-- **scripts/setup_target.py** — Clone/setup working dir (called by Claude)
-- **scripts/score.py** — Weighted score computation (called by Claude)
-- **scripts/verify.py** — Anti-bias verification (called by Claude)
-- **scripts/checkpoint.py** — Round snapshots (called by Claude)
-- **prompts/evaluate_dimension.md** — Per-dimension protocol (followed by Claude)
-- **prompts/improvement_plan.md** — Fix planning (followed by Claude)
-- **prompts/verify_round.md** — Cross-check & revert (followed by Claude)
+- **SKILL.md** — Execution contract (Agent reads this as its instruction set)
+- **scripts/config_loader.py** — YAML → JSON resolver (called by the Agent)
+- **scripts/setup_target.py** — Clone/setup working dir (called by the Agent)
+- **scripts/score.py** — Weighted score computation (called by the Agent)
+- **scripts/verify.py** — Anti-bias verification (called by the Agent)
+- **scripts/checkpoint.py** — Round snapshots (called by the Agent)
+- **prompts/evaluate_dimension.md** — Per-dimension protocol (followed by the Agent)
+- **prompts/improvement_plan.md** — Fix planning (followed by the Agent)
+- **prompts/verify_round.md** — Cross-check & revert (followed by the Agent)
 
 ## Documentation
 
@@ -522,4 +522,4 @@ MIT License - See LICENSE file
 
 - Framework: Based on Karpathy's autoresearch pattern (`github.com/karpathy/autoresearch`)
 - Quality model: Extended from Harness Engineering framework (base model: 12 core dimensions)
-- Implementation: Claude Code skill with Python orchestration + LLM evaluation
+- Implementation: OpenClaw skill with Python orchestration + LLM evaluation

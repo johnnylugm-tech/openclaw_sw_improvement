@@ -78,8 +78,8 @@ Each round: **3a-evaluate → 3b-score → 3c-verify → 3d-checkpoint → 3e-ea
 - Output: markdown summary for dashboard
 
 > **Commit timing:**
-> - Per-fix: one `git commit` per issue fixed (in Step 3f, called by Claude)
-> - Per-round: one `git tag round-<n>` (in Step 3d, called by Claude)
+> - Per-fix: one `git commit` per issue fixed (in Step 3f, called by the Agent)
+> - Per-round: one `git tag round-<n>` (in Step 3d, called by the Agent)
 > - Never automatic push — user decides when to push to remote
 
 **3e. Early-Stop Check (Issue-Driven)**
@@ -240,13 +240,13 @@ See `docs/EXTENDED_DIMENSIONS.md` for prerequisites and integration.
 
 ## Invocation
 
-**This framework runs exclusively via the Claude Code conversation window.**
-There is no standalone CLI command to launch it. Claude reads this SKILL.md as
+**This framework runs via the OpenClaw conversation interface.**
+There is no standalone CLI command to launch it. The Agent reads this SKILL.md as
 its instruction set and executes each step interactively.
 
 ### Starting a Quality Improvement Run
 
-Open Claude Code and say (example prompts):
+Open the conversation and say (example prompts):
 ```
 "Please run the quality improvement skill on /path/to/repo"
 "Evaluate code quality for https://github.com/user/repo using config.yaml"
@@ -254,10 +254,10 @@ Open Claude Code and say (example prompts):
 ```
 
 Claude will then execute Steps 1–4 from this document, calling CLI scripts
-where needed. The Python scripts are called by Claude as shell commands —
+where needed. The Python scripts are called by the Agent as shell commands —
 they are not invoked directly by users.
 
-### CLI Scripts (called by Claude, not by users directly)
+### CLI Scripts (called by the Agent, not by users directly)
 
 ```bash
 # Step 1 — Claude calls these to resolve config + target
@@ -277,7 +277,7 @@ python3 scripts/checkpoint.py round <n> scores.json <overall_score>
 python3 scripts/report_gen.py <repo_path> .sessi-work .sessi-work/issue_registry.json <score_gate> .sessi-work/final_report.md
 ```
 
-### Prompts (read and followed by Claude, not executed as commands)
+### Prompts (read and followed by the Agent, not executed as commands)
 
 - `prompts/evaluate_dimension.md` — Claude follows this protocol for each dimension
 - `prompts/improvement_plan.md` — Claude follows this to plan and apply fixes
@@ -299,7 +299,7 @@ Defends against: laziness (偷懶), shortcuts (走捷徑), hallucination (幻覺
 
 **New 5 layers (v3.1):**
 8. **Execution Contract:** behavioral red lines declared at prompt start — skip = invalid output
-9. **Devil's Advocate:** Gemini Flash challenges Tier 3 findings before score write; deterministic penalty rules
+9. **Devil's Advocate:** Secondary LLM call challenges Tier 3 findings before score write; deterministic penalty rules
 10. **High-Score Confirmation Gate:** `llm_score ≥ 85` requires negative space proof + CRG evidence + tool alignment; else capped at 80
 11. **Fix Verification Enforcement Gate:** `mark_fixed()` raises `ValueError` without `commit_sha` + `tool_rerun_path` for tool-verifiable dims
 12. **Self-Consistency Uncertainty Gate:** `verify.py` flags Δ > 15 with < 3 evidence pieces, tool/LLM divergence > 20 pts, high scores bypassing Step 2c
@@ -367,8 +367,8 @@ When [Code Review Graph](https://github.com/code-review-graph) (CRG) is installe
 
 **Installation** (one-time, per target repo):
 ```bash
-code-review-graph install --platform claude-code --repo <target>
-# Restart Claude Code to load .mcp.json
+code-review-graph install --platform openclaw --repo <target>
+# Restart the application to load .mcp.json
 # Graph build is automatic — setup_target.py runs it on first session
 ```
 
@@ -413,4 +413,4 @@ prevents the failure mode where a lint-clean repo hides broken architecture.
 
 - Framework: Based on Karpathy's autoresearch pattern
 - Quality model: Harness Engineering 12-dimension weighted scoring
-- Implementation: Claude Code skill with Python orchestration + LLM evaluation steps
+- Implementation: OpenClaw skill with Python orchestration + LLM evaluation steps

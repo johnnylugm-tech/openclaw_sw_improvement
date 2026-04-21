@@ -214,15 +214,15 @@ evaluation:
 llm_routing:
   enabled: true
   tier1:
-    provider: gemini
-    model: gemini-2.5-flash
+    provider: default
+    model: MiniMax M2.7
     dimensions: [linting, type_safety, test_coverage,
                  secrets_scanning, license_compliance, mutation_testing,
                  property_testing, fuzzing, accessibility,
                  observability, supply_chain_security]
   tier2:
-    provider: gemini
-    model: gemini-2.5-flash
+    provider: default
+    model: MiniMax M2.7
     dimensions: [security]
   tier3:
     provider: claude_native

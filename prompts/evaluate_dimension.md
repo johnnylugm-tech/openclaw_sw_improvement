@@ -4,22 +4,22 @@ Evaluate a single quality dimension using the **tool-first hierarchy** and **LLM
 
 ---
 
-## Execution Contract (強制，每次執行前確認)
+## Execution Contract (強制,每次執行前確認)
 
-> **這是行為紅線宣告，不可跳過。違反任一項，本步驟結果視為無效。**
+> **這是行為紅線宣告,不可跳過。違反任一項,本步驟結果視為無效。**
 >
-> ❌ **禁止行為：**
-> - 未執行工具指令就填寫 `tool_score`（估分 = 造假）
-> - `tool_output_path` 為 null 時，使用 `llm_score` 作為最終分數
+> ❌ **禁止行為:**
+> - 未執行工具指令就填寫 `tool_score`(估分 = 造假)
+> - `tool_output_path` 為 null 時,使用 `llm_score` 作為最終分數
 > - findings[] 中填入無 `file:line` 或工具輸出支撐的項目
 > - Tier 3 維度給出 ≥ 85 分但未完成 Step 2c 高分確認清單
-> - 跳過工具執行步驟，直接進行 Step 2 LLM 評估
+> - 跳過工具執行步驟,直接進行 Step 2 LLM 評估
 >
-> ✅ **每個 score 文件必須滿足：**
-> - `tool_output_path`: 指向實際執行工具的輸出檔（不得為 null）
+> ✅ **每個 score 文件必須滿足:**
+> - `tool_output_path`: 指向實際執行工具的輸出檔(不得為 null)
 > - `tool_outputs` 欄位: 必須包含工具指令輸出的原始路徑或內容摘要
-> - 若工具不可用（未安裝）→ `tool_score: null`，並在 score 文件標註原因
-> - `llm_score` 只能作為輔助；`score = min(tool_score, llm_score)` 規則強制執行
+> - 若工具不可用(未安裝)→ `tool_score: null`,並在 score 文件標註原因
+> - `llm_score` 只能作為輔助;`score = min(tool_score, llm_score)` 規則強制執行
 
 ---
 
@@ -35,9 +35,9 @@ Read the `tier` and `provider` fields:
 
 | Tier | Provider | Dimensions | Action |
 |------|----------|-----------|--------|
-| 1 | `gemini` | linting, type_safety, test_coverage, secrets_scanning, license_compliance, mutation_testing | Use `mcp__gemini-cli__ask-gemini` |
-| 2 | `gemini` | security | Use `mcp__gemini-cli__ask-gemini` |
-| 3 | `claude_native` | architecture, readability, error_handling, documentation, performance | Use Claude reasoning (this session) |
+| 1 | `default` | linting, type_safety, test_coverage, secrets_scanning, license_compliance, mutation_testing | Use default LLM (agent) |
+| 2 | `default` | security | Use default LLM (agent) |
+| 3 | `claude_native` | architecture, readability, error_handling, documentation, performance | Use Agent reasoning (this session) |
 
 **NEVER** use Claude for Tier 1/2 dimensions. **NEVER** use Gemini for Tier 3.
 
@@ -108,7 +108,7 @@ radon mi src/ -j 2>&1 | head -100
 
 ### error_handling (Tier 3)
 ```bash
-# No reliable tool — LLM must scan for bare except, silent failures
+# No reliable tool - LLM must scan for bare except, silent failures
 grep -rn "except:" src/ | head -50
 grep -rn "pass$" src/ | head -50
 ```
@@ -130,22 +130,23 @@ radon cc src/ -j --min C 2>&1 | head -100  # Complex functions
 
 ## Step 2: Evaluate (LLM Tier Routing)
 
-### IF Tier 1 or Tier 2 → Call Gemini Flash
+### IF Tier 1 or Tier 2 → Use Default LLM (Agent)
+
 
 Get the prompt from the router:
 ```bash
 python3 scripts/llm_router.py <dimension> .sessi-work/round_<n>/tools/<dimension>.txt
 ```
 
-Use `gemini_prompt` field from output. Call Gemini:
+Use `prompt` field from output. Call the default LLM:
 
 ```
-[USE mcp__gemini-cli__ask-gemini]
-model: gemini-2.5-flash
-prompt: <gemini_prompt from router output>
+The Agent evaluates the dimension using the default LLM. Prompt from router:
+<prompt from router output>
 ```
 
-Parse the JSON response. The Gemini response IS the dimension score.
+
+Parse the JSON response. The response IS the dimension score.
 
 **Token budget:** ≤ 8K input, ≤ 800 output (enforced by router prompt template)
 
@@ -160,13 +161,13 @@ Read tool output from `.sessi-work/round_<n>/tools/<dimension>.txt`.
 Before reading source code, pull pre-computed structural intel from the CRG
 knowledge graph. This replaces blind code reading with targeted questions.
 
-**CRG status is already resolved** — `setup_target.py` auto-detected and built
+**CRG status is already resolved** - `setup_target.py` auto-detected and built
 the graph at session start. Read its output:
 
 ```bash
 cat .sessi-work/crg_status.json
 # → {"available": true, "node_count": 342, "action": "auto_built", "repo": "..."}
-# OR {"available": false, "reason": "code-review-graph not installed — ..."}
+# OR {"available": false, "reason": "code-review-graph not installed - ..."}
 ```
 
 If `available: false` → skip CRG; fall back to full code reading (higher token cost).
@@ -178,7 +179,7 @@ If `available: false` → skip CRG; fall back to full code reading (higher token
 task: "evaluate <dimension> dimension"
 ```
 
-Read `risk_score` and `suggested_next_tools` — use them to focus the dimension
+Read `risk_score` and `suggested_next_tools` - use them to focus the dimension
 analysis rather than scanning the full codebase. Also check
 `.sessi-work/crg_reconnaissance.json` (written in Step 2.5) for pre-identified
 hotspots in this dimension's files.
@@ -194,10 +195,10 @@ EVAL_DEPTH=$(python3 scripts/crg_analysis.py depth_gate \
 | `eval_depth` | risk_score       | Token budget per Tier 3 dim                       |
 |--------------|------------------|---------------------------------------------------|
 | `deep`       | ≥ 0.7            | Full LLM reasoning + hub source read (+ flow walk) |
-| `standard`   | 0.3–0.7 (inclusive of 0.3) | Tool + LLM one-paragraph assessment      |
+| `standard`   | 0.3-0.7 (inclusive of 0.3) | Tool + LLM one-paragraph assessment      |
 | `fast`       | < 0.3            | Tool output only, skip Tier 3 LLM assessment      |
 
-The depth is a hard budget — do not read source for hub nodes if
+The depth is a hard budget - do not read source for hub nodes if
 `EVAL_DEPTH=fast`. This replaces "LLM decides how much to look" with
 a deterministic, risk-proportional scan.
 
@@ -209,16 +210,16 @@ cat .sessi-work/crg_metrics.json
 
 Relevant fields per Tier 3 dimension:
 
-- **architecture** — `community_cohesion.score` (0–100) and
+- **architecture** - `community_cohesion.score` (0-100) and
   `community_cohesion.unhealthy[]`. `score.py` takes `min(tool_score, cohesion)`
   so a repo with low-cohesion / oversized communities cannot score above the
   CRG signal. Evidence: cite `name`, `cohesion`, `size` from `unhealthy[]`.
 
-- **error_handling** — `flow_coverage.score` and `flow_coverage.missing[]`.
+- **error_handling** - `flow_coverage.score` and `flow_coverage.missing[]`.
   `score.py` takes `min(tool_score, flow_coverage)`. Findings: one per flow
   name in `missing[]`, severity `high` if the flow is in a hub community.
 
-- **readability / performance** — use `hub_risk_map.hubs[]`. Each hub lists
+- **readability / performance** - use `hub_risk_map.hubs[]`. Each hub lists
   `fan_in` and `severity`. Large-function + hub + `severity=critical|high`
   → register as `readability:high` (readability) or `performance:medium`
   (performance) finding, cited with the numeric fan_in.
@@ -231,11 +232,11 @@ fan_in ≥ 8    → high (untested) / medium (tested)
 fan_in <  8   → medium (untested) / low (tested)
 ```
 
-Score-file severities MUST use these buckets — no free-hand severity calls
+Score-file severities MUST use these buckets - no free-hand severity calls
 for hub-related findings.
 
 Then, per dimension, use the corresponding **CRG MCP tools** (available once
-`.mcp.json` is loaded — the `code-review-graph` server exposes 27 tools):
+`.mcp.json` is loaded - the `code-review-graph` server exposes 27 tools):
 
 | Dimension | CRG MCP tools to call | What to ask |
 |-----------|----------------------|-------------|
@@ -247,45 +248,45 @@ Then, per dimension, use the corresponding **CRG MCP tools** (available once
 
 **Token-efficient evaluation protocol:**
 
-1. **CRG context (cheap)** — call the MCP tools above; they return structured JSON
+1. **CRG context (cheap)** - call the MCP tools above; they return structured JSON
    in ~500-2000 tokens total instead of reading 10,000+ lines of code
-2. **Tool score** — What do the tools report? Extract numeric signal (0-100).
-3. **LLM score** — Your assessment using CRG structural data + spot-reads of
+2. **Tool score** - What do the tools report? Extract numeric signal (0-100).
+3. **LLM score** - Your assessment using CRG structural data + spot-reads of
    specific files/lines identified by CRG as problematic
-4. **Reconcile** — `score = min(tool_score, llm_score)` — never inflate
-5. **Evidence** — Every finding cites file:line from CRG output AND/OR tool output
-6. **Gaps** — Cross-reference CRG knowledge_gaps with tool findings
+4. **Reconcile** - `score = min(tool_score, llm_score)` - never inflate
+5. **Evidence** - Every finding cites file:line from CRG output AND/OR tool output
+6. **Gaps** - Cross-reference CRG knowledge_gaps with tool findings
 
 **Token discipline for Tier 3:**
-- Call `get_minimal_context` first (always) — orients analysis in ~100 tokens
+- Call `get_minimal_context` first (always) - orients analysis in ~100 tokens
 - Read `crg_reconnaissance.json` for pre-identified hotspots in this dimension
 - Read CRG tool output second; code third (only for files CRG flagged)
-- Spot-read 2–5 specific functions CRG identified as problematic
+- Spot-read 2-5 specific functions CRG identified as problematic
 - NEVER read whole files if CRG can answer the question
 - Keep findings list ≤ 7 items
-- Target: −30 to −50% token reduction vs pure-code-reading approach
+- Target: -30 to -50% token reduction vs pure-code-reading approach
 
 **Additional targeted tools (call as needed):**
-- `query_graph_tool(pattern="tests_for", target="<hub_node>")` — verify hub nodes have explicit tests
-- `traverse_graph_tool(query="<function>", mode="bfs", depth=2)` — fan-in/fan-out for a specific node
-- `query_graph_tool(pattern="callers_of", target="<function>")` — who calls this function
+- `query_graph_tool(pattern="tests_for", target="<hub_node>")` - verify hub nodes have explicit tests
+- `traverse_graph_tool(query="<function>", mode="bfs", depth=2)` - fan-in/fan-out for a specific node
+- `query_graph_tool(pattern="callers_of", target="<function>")` - who calls this function
 
 **Graceful degradation:** If CRG is not installed or graph is empty, the
-evaluation still works — just with higher token cost. The framework must
+evaluation still works - just with higher token cost. The framework must
 remain functional without CRG.
 
 ---
 
 ## Step 2b (Tier 3 ONLY): Devil's Advocate 交叉挑戰
 
-> **目的**: 用不同模型主動挑戰 Claude 自己的評估，防止自我感覺良好。  
-> **執行時機**: Claude 完成 Step 2a 評估、寫出初稿 findings 之後，寫入 score 文件之前。
+> **目的**: 用不同模型主動挑戰 Agent 自己的評估，防止自我感覺良好。
+> **執行時機**: Agent 完成 Step 2a 評估、寫出初稿 findings 之後，寫入 score 文件之前。
 
 ```
-[USE mcp__gemini-cli__ask-gemini]
-model: gemini-2.5-flash
-prompt: |
-  你是一位挑剔的資深 code reviewer，擅長找出評估者忽視的問題。
+The Agent (or a secondary LLM call) challenges the findings from Step 2a:
+
+Prompt:
+| 你是一位挑剔的資深 code reviewer，擅長找出評估者忽視的問題。
   以下是一份針對 <dimension> 維度的程式碼品質評估結果。
   
   **你的任務是主動反駁這份評估，找出它的缺陷：**
@@ -302,48 +303,48 @@ prompt: |
   }
   
   評估內容：
-  <將 Claude Step 2a 的完整 findings[] 和 llm_score 貼入>
+  <將 Agent Step 2a 的完整 findings[] 和 llm_score 貼入>
 ```
 
-**DA 裁決規則（確定性，不得 LLM 主觀覆蓋）：**
+**DA 裁決規則(確定性,不得 LLM 主觀覆蓋):**
 
 | DA 結果 | 動作 |
 |---------|------|
-| `missed_issues` ≥ 2 個具體問題 | `llm_score` 降 10 分，將問題加入 `findings[]`，severity=medium |
+| `missed_issues` ≥ 2 個具體問題 | `llm_score` 降 10 分,將問題加入 `findings[]`,severity=medium |
 | `da_verdict: "challenged"` | 在 score 文件加 `"da_challenge": true` 標記 |
 | `overestimation_risk` 非空且有具體理由 | `llm_score` 降 5 分 |
-| `da_verdict: "confirmed"` 且無具體 missed_issues | 正常繼續，記錄 `"da_challenge": false` |
+| `da_verdict: "confirmed"` 且無具體 missed_issues | 正常繼續,記錄 `"da_challenge": false` |
 
 ---
 
-## Step 2c (Tier 3 ONLY): 高分確認清單（Anti-Inflation Gate）
+## Step 2c (Tier 3 ONLY): 高分確認清單(Anti-Inflation Gate)
 
 **觸發條件**: `llm_score ≥ 85`
 
-當 Claude 準備給出 ≥ 85 的 Tier 3 分數時，**必須先完成以下三項確認**，
+當 Claude 準備給出 ≥ 85 的 Tier 3 分數時,**必須先完成以下三項確認**,
 否則分數上限強制設為 80。
 
 ```
-高分確認清單（三選三，全部必填）：
+高分確認清單(三選三,全部必填):
 
-1. 負空間證明（Negative Space Proof）:
-   「在這個 repo 中，我明確檢查了以下問題但確認不存在：
-   - [問題A]：未發現，原因是 [具體原因]
-   - [問題B]：未發現，原因是 [具體原因]
+1. 負空間證明(Negative Space Proof):
+   「在這個 repo 中,我明確檢查了以下問題但確認不存在:
+   - [問題A]:未發現,原因是 [具體原因]
+   - [問題B]:未發現,原因是 [具體原因]
    至少 2 項具體問題」
 
-2. CRG 結構佐證（若 CRG 可用）:
-   「與高分一致的結構性證據：
-   - hub node <X> 的 fan-in=<N>，且在 knowledge_gaps 中未出現
-   - community <Y> 的 cohesion=<0.X>，屬於健康範圍
+2. CRG 結構佐證(若 CRG 可用):
+   「與高分一致的結構性證據:
+   - hub node <X> 的 fan-in=<N>,且在 knowledge_gaps 中未出現
+   - community <Y> 的 cohesion=<0.X>,屬於健康範圍
    至少引用 1 個 CRG 數據點」
 
 3. 工具分佐證:
-   「tool_score = <N>（來自 <tool_name> 輸出），
-   與 llm_score 差距 < 10，符合 min() 規則不會被大幅壓低」
+   「tool_score = <N>(來自 <tool_name> 輸出),
+   與 llm_score 差距 < 10,符合 min() 規則不會被大幅壓低」
 ```
 
-若 `llm_score ≥ 85` 但三項確認任一缺失 → 強制將 `llm_score` 降至 `80`，
+若 `llm_score ≥ 85` 但三項確認任一缺失 → 強制將 `llm_score` 降至 `80`,
 並在 score 文件加 `"inflation_capped": true`。
 
 ---
@@ -421,11 +422,11 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 
 ## Anti-Bias Rules (All Tiers)
 
-1. `score = min(tool_score, llm_score)` — no exceptions
-2. Every finding needs `evidence` field — no bare assertions
+1. `score = min(tool_score, llm_score)` - no exceptions
+2. Every finding needs `evidence` field - no bare assertions
 3. If tool gives no output (tool missing/error) → `tool_score = null`, use `llm_score` only, flag in score file
 4. Δ > 10 from previous round requires tool evidence or ≥ 3 lines of git diff
-5. Tier 1/2 evaluations: trust the tool output — Gemini's role is only to parse and structure it
+5. Tier 1/2 evaluations: trust the tool output — LLM's role is only to parse and structure it
 
 ---
 
@@ -433,8 +434,8 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 
 | Tier | Provider | Typical cost/dim | Use case |
 |------|----------|-----------------|---------|
-| 1 | Gemini Flash | ~$0.001 | Tool summarization |
-| 2 | Gemini Flash | ~$0.002 | Light judgment |
+| 1 | MiniMax M2.7 | ~$0.001 | Tool summarization |
+| 2 | MiniMax M2.7 | ~$0.002 | Light judgment |
 | 3 | Claude Sonnet | ~$0.08 | Deep reasoning |
 
 **Total per round (12 dims + improve):**

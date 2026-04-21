@@ -539,7 +539,7 @@ property_testing:
 cp config.advanced.yaml config.yaml
 # Edit: set 'enabled: true' for desired dims
 ```
-Then in Claude Code: `"Run quality improvement using config.advanced.yaml"`
+Then in OpenClaw: `"Run quality improvement using config.advanced.yaml"`
 
 ## Best Practices
 

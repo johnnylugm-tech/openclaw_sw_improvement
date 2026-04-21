@@ -89,7 +89,7 @@ Session start
 │ Step 3a: evaluate_dimension.md  (per dimension)         │
 │                                                         │
 │  Tier 1/2 (linting, type_safety, security …)           │
-│  → tool + Gemini Flash; CRG not called                  │
+│  → tool + default LLM; CRG not called                  │
 │                                                         │
 │  Tier 3 (architecture, error_handling, readability …)   │
 │                                                         │
