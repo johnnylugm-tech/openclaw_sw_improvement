@@ -18,25 +18,25 @@ from typing import Optional
 DIMENSIONS = {
     "linting": {
         "tool": "pylint",
-        "command": ["pylint", "{target}", "--output-format=json", "--disable=import-error"],
+        "command": ["pylint", "{target}", "--output-format=json", "--disable=import-error", "--ignore=mutants"],
         "score_type": "pylint_json",
         "weight": 0.06,
     },
     "type_safety": {
         "tool": "mypy",
-        "command": ["mypy", "{target}", "--output-format=json"],
-        "score_type": "mypy_json",
+        "command": ["mypy", "{target}"],
+        "score_type": "mypy_text",
         "weight": 0.10,
     },
     "test_coverage": {
         "tool": "pytest",
-        "command": ["pytest", "--cov", "--cov-output=json", "--cov-report=term:skip"],
-        "score_type": "coverage_json",
+        "command": ["pytest", "--cov", "--cov-report=term", "-q"],
+        "score_type": "coverage_term",
         "weight": 0.13,
     },
     "security": {
         "tool": "bandit",
-        "command": ["bandit", "-r", "-f", "json", "{target}"],
+        "command": ["bandit", "-r", "-f", "json", "-x", "**/mutants/**", "{target}"],
         "score_type": "bandit_json",
         "weight": 0.10,
     },
@@ -160,11 +160,40 @@ def _parse_mypy_json(stdout: str) -> dict:
     return findings
 
 
-def _parse_bandit_json(stdout: str) -> dict:
-    """Parse bandit JSON output to findings."""
+def _parse_mypy_text(stdout: str) -> dict:
+    """Parse mypy text output to findings.
+
+    Mypy text format: 'file.py:line: error: message'
+    or 'file.py:line: note: message'
+    """
     findings = []
+    for line in stdout.strip().split('\n'):
+        # Match: 'file.py:line: error: message' or 'file.py:line: note: message'
+        m = re.match(r'([^:]+):(\d+): (.+?): (.+)', line)
+        if m:
+            fname, line_no, sev, msg = m.groups()
+            sev = 'medium' if 'error' in sev.lower() else 'low'
+            findings.append({
+                'file': fname,
+                'line': int(line_no),
+                'message': f'{sev.upper()}: {msg}',
+                'severity': sev,
+            })
+    return findings
+
+
+def _parse_bandit_json(stdout: str) -> dict:
+    """Parse bandit JSON output to findings.
+
+    Bandit may prepend progress bars (\u2500 chars) when run interactively.
+    We find the first '{' to locate the actual JSON.
+    """
+    findings = []
+    # Find JSON start (bandit may have progress bar prefix)
+    json_start = stdout.find('{')
+    json_text = stdout[json_start:] if json_start >= 0 else stdout
     try:
-        data = json.loads(stdout)
+        data = json.loads(json_text)
         for item in data.get("results", []):
             fname = item.get("filename", "unknown")
             line = item.get("line_number", 0)
@@ -231,6 +260,38 @@ def _parse_gremlins_json(stdout: str) -> dict:
     return findings
 
 
+def _parse_coverage_term(stdout: str) -> dict:
+    """Parse pytest --cov --cov-report=term output to findings.
+
+    Parses lines like:
+        TOTAL  2490   402    84%
+    or
+        src/    100    10    90%
+    """
+    findings = []
+    for line in stdout.strip().split('\n'):
+        if '\t' in line:
+            parts = line.split('\t')
+        else:
+            parts = line.split()
+        # Find TOTAL line or per-file line with coverage
+        if len(parts) >= 4 and parts[0].strip() in ('TOTAL', 'TOTAL%'):
+            try:
+                # Format: name  statements  missing  coverage%
+                name = parts[0].strip()
+                coverage_str = parts[-1].strip().rstrip('%')
+                coverage = float(coverage_str)
+                findings.append({
+                    'file': name,
+                    'line': 0,
+                    'message': f'Coverage: {coverage}%',
+                    'severity': 'info',
+                })
+            except (ValueError, IndexError):
+                pass
+    return findings
+
+
 def _compute_tool_score(findings: list, dimension: str) -> int:
     """Compute 0-100 tool score from findings."""
     if dimension == "linting":
@@ -271,6 +332,16 @@ def _compute_tool_score(findings: list, dimension: str) -> int:
                 m = re.search(r'\(([\d.]+)%\)', msg)
                 if m:
                     return min(100, float(m.group(1)))
+        return 0
+    elif dimension == "test_coverage":
+        # Extract coverage % from findings message (e.g., "Coverage: 84%")
+        for f in findings:
+            msg = f.get("message", "")
+            if "Coverage:" in msg:
+                import re
+                m = re.search(r'Coverage: ([\d.]+)%', msg)
+                if m:
+                    return float(m.group(1))
         return 0
     else:
         count = len(findings)
@@ -313,13 +384,19 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
             "status": "error",
         }
 
-    raw_output = stdout if rc == 0 else stderr
+    # Prefer stdout for JSON tools (bandit: findings → RC=1, JSON in stdout)
+    # Prefer stdout for all tools when it has content, fall back to stderr
+    raw_output = stdout if stdout.strip() else stderr
 
     # Parse findings
     if config.get(dimension, {}).get("score_type") == "pylint_json":
         findings = _parse_pylint_json(stdout)
     elif config.get(dimension, {}).get("score_type") == "mypy_json":
         findings = _parse_mypy_json(stdout)
+    elif config.get(dimension, {}).get("score_type") == "mypy_text":
+        findings = _parse_mypy_text(stdout)
+    elif config.get(dimension, {}).get("score_type") == "coverage_term":
+        findings = _parse_coverage_term(stdout)
     elif config.get(dimension, {}).get("score_type") == "bandit_json":
         findings = _parse_bandit_json(stdout)
     elif config.get(dimension, {}).get("score_type") == "gitleaks_json":
@@ -341,12 +418,19 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
 
     tool_score = _compute_tool_score(findings, dimension)
 
+    # Status: success if findings were parsed (regardless of tool RC),
+    # error only if tool could not run or findings could not be extracted.
+    # pylint/bandit return RC=1 when findings exist (not an error).
+    findings_parsed = isinstance(findings, list)
+    tool_executed = rc != -1  # -1 means tool-not-found or timeout
+    status = "success" if (findings_parsed and tool_executed) else "error"
+
     return {
         "dimension": dimension,
         "tool_score": tool_score,
         "raw_output": raw_output[:5000],
         "findings": findings[:50],  # Cap at 50 findings
-        "status": "success" if rc == 0 else "error",
+        "status": status,
     }
 
 
