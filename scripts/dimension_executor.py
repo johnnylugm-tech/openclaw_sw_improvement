@@ -238,6 +238,42 @@ def _parse_gitleaks_json(stdout: str) -> dict:
     return findings
 
 
+def _parse_cloc_json(stdout: str) -> dict:
+    """Parse cloc JSON output.
+
+    Format: {"header": {...}, "Python": {nFiles, blank, comment, code}, "SUM": {...}}
+    Returns findings with code stats for architecture assessment.
+    """
+    findings = []
+    try:
+        text = stdout.strip()
+        idx = text.find("{")
+        if idx >= 0:
+            text = text[idx:]
+        data = json.loads(text)
+        # Find Python language entry (primary language for scoring)
+        # Fall back to first non-header entry if Python not found
+        primary_lang = data.get("Python") or data.get("SUM")
+        found_key = "Python" if data.get("Python") else None
+        if primary_lang and isinstance(primary_lang, dict) and "code" in primary_lang:
+            n_files = primary_lang.get("nFiles", 0)
+            code = primary_lang.get("code", 0)
+            blank = primary_lang.get("blank", 0)
+            comment = primary_lang.get("comment", 0)
+            total = code + blank + comment
+            comment_ratio = (comment / total * 100) if total > 0 else 0
+            code_per_file = (code / n_files) if n_files > 0 else 0
+            findings.append({
+                "file": f"language:{found_key or 'primary'}",
+                "line": 0,
+                "message": f"cloc: {n_files} files, {code} LOC, {code_per_file:.0f} LOC/file, {comment_ratio:.1f}% comments",
+                "severity": "info",
+            })
+    except (json.JSONDecodeError, OSError, ZeroDivisionError):
+        pass
+    return findings
+
+
 def _parse_gremlins_json(stdout: str) -> dict:
     """Parse pytest-gremlins JSON output.
 
@@ -352,6 +388,45 @@ def _compute_tool_score(findings: list, dimension: str) -> int:
         if count == 0:
             return 100
         return max(0, 100 - count * 25)  # Zero tolerance
+    elif dimension == "architecture":
+        # Architecture score based on cloc metrics
+        # Parse "cloc: N files, M LOC, X LOC/file, Y% comments" from findings
+        total_files = 0
+        total_code = 0
+        comment_ratio = 0
+        n = 0
+        for f in findings:
+            msg = f.get("message", "")
+            if "cloc:" in msg:
+                # Extract: cloc: N files, M LOC, X LOC/file, Y% comments
+                import re
+                m = re.search(r'cloc: (\d+) files, (\d+) LOC, (\d+) LOC/file, ([\d.]+)% comments', msg)
+                if m:
+                    total_files = int(m.group(1))
+                    total_code = int(m.group(2))
+                    loc_per_file = int(m.group(3))
+                    comment_ratio = float(m.group(4))
+                    n += 1
+        if n == 0:
+            return 0
+        # Score heuristics:
+        # - comment_ratio >= 15%: +40 pts
+        # - LOC/file 50-200: +30 pts (reasonable module size)
+        # - Files >= 5 (proper separation): +30 pts
+        score = 0
+        if comment_ratio >= 15:
+            score += 40
+        elif comment_ratio >= 10:
+            score += 20
+        if 50 <= loc_per_file <= 200:
+            score += 30
+        elif loc_per_file < 50:
+            score += 15
+        if total_files >= 5:
+            score += 30
+        elif total_files >= 3:
+            score += 15
+        return min(100, score)
     elif dimension == "readability":
         # radon cc: lower complexity = higher score
         # For now, score based on absence of findings
@@ -436,6 +511,8 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
         findings = _parse_gitleaks_json(stdout)
     elif config.get(dimension, {}).get("score_type") == "gremlins_json":
         findings = _parse_gremlins_json(stdout)
+    elif config.get(dimension, {}).get("score_type") == "cloc_json":
+        findings = _parse_cloc_json(stdout)
     else:
         # Count-based scoring
         lines = stdout.strip().split("\n") if stdout.strip() else []
