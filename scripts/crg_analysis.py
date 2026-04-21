@@ -1,9 +1,44 @@
-#!/opt/homebrew/bin/python3.12
+#!/usr/bin/env python3
 """
-CRG Analysis: Convert raw CRG wrapper output into structured metrics.
+CRG Analysis: Convert raw reconnaissance data into structured, deterministic
+metrics with explicit thresholds.
 
-Reads crg_wrapper.py CLI output (JSON) instead of MCP tool responses.
-Computes deterministic metrics with explicit thresholds.
+This is the "deep integration" layer. Without it, LLM reads CRG tool outputs
+and makes subjective calls. With it, formulas + thresholds produce concrete
+decisions that downstream scripts (score.py, improvement_plan.md,
+evaluate_dimension.md) can act on without LLM judgment.
+
+Input:  .sessi-work/crg_reconnaissance.json   (written by crg_reconnaissance.md)
+Output: .sessi-work/crg_metrics.json          (consumed by score.py and prompts)
+
+Primary metrics:
+  - risk_score                  (from reconnaissance; 0.0-1.0)
+  - eval_depth                  (deep | standard | fast — drives token budget)
+  - community_cohesion_score    (0-100, feeds architecture sub-score)
+  - flow_coverage_score         (0-100, feeds error_handling sub-score)
+  - dead_code_ratio             (%, escalates severity if > threshold)
+  - hub_risk_map                (fan_in → severity; feeds seed_issues)
+
+Explicit thresholds (documented, reviewable, changeable):
+
+  RISK_DEEP_THRESHOLD          0.7    risk_score ≥ this → deep analysis mandatory
+  RISK_FAST_THRESHOLD          0.3    risk_score < this → fast scan allowed
+  COHESION_HEALTHY             0.4    cohesion ≥ this = healthy community
+  COMMUNITY_OVERSIZED          50     size > this = god-module candidate
+  DEAD_CODE_ESCALATE_RATIO     0.05   dead/total > 5% → escalate low → medium
+  HUB_CRITICAL_FAN_IN          15     fan_in ≥ this = critical severity
+  HUB_HIGH_FAN_IN             8      fan_in ≥ this = high severity
+  FLOW_GOOD_HANDLER_PCT        80     ≥ this% flows with handlers = healthy
+
+All thresholds are ENV-overridable via CRG_* env vars for experimentation.
+
+6 Deep-Integration Points:
+  #1  eval_depth       → depth_gate() drives token budget (deep/standard/fast)
+  #2  architecture     → min(tool_score, cohesion_score)
+  #3  error_handling   → min(tool_score, flow_coverage_score)
+  #4  dead_code        → escalate low→medium if ratio > 5%
+  #5  hub fan-in       → fan_in buckets (15/8) → severity (critical/high/med/low)
+  #6  seed_issues      → suggested_questions[] → registry issues
 """
 
 import os
@@ -147,7 +182,8 @@ def compute_hub_risk_map(hubs: list, knowledge_gaps: list) -> dict:
 def compute_metrics(recon: dict) -> dict:
     risk_score = recon.get("risk_score")
     stats = recon.get("graph_stats", {})
-    total_nodes = stats.get("nodes", 0) or 0
+    # Accept either "nodes" (ref schema) or "node_count" (crg_wrapper stats output)
+    total_nodes = stats.get("nodes", 0) or stats.get("node_count", 0)
 
     communities = (
         recon.get("low_cohesion_communities", [])
