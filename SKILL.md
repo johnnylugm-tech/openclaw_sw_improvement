@@ -331,18 +331,88 @@ This prevents LLM from inflating scores when tools say otherwise.
 ## Code Review Graph Integration
 
 When CRG is installed, **four integration points** activate automatically
-(6 with deep-integration formulas — see `scripts/crg_analysis.py`):
+(22 of 27 MCP tools utilized, 6 with deep-integration formulas — see `scripts/crg_analysis.py`):
+
+**4 CRG Integration Points:**
+
+1. **Structural reconnaissance (crg_reconnaissance.md — Step 2.5):** runs once
+   per session before the first evaluation round. Uses `get_minimal_context`,
+   `list_graph_stats`, `get_suggested_questions`, `get_hub_nodes`, `get_bridge_nodes`,
+   `list_communities`, `get_community`, `get_knowledge_gaps`,
+   `get_surprising_connections`, `refactor_tool(dead_code)` to identify high-risk
+   components, untested hotspots, unexpected couplings, and dead code.
+   Pre-seeds the issue registry (~3,900 tokens vs ~10,000+ for blind file reading).
+
+2. **Tier 3 evaluation (evaluate_dimension.md):** architecture / readability /
+   performance / documentation / error_handling dimensions start with
+   `get_minimal_context` then query dimension-specific tools (hub nodes,
+   bridge nodes, large functions, knowledge gaps, community cohesion, flow analysis)
+   before reading any source code. Target: −30 to −50% Tier 3 token reduction.
+
+3. **Pre-fix context + safety gate (improvement_plan.md):** before each fix,
+   `get_minimal_context` + `get_review_context` replace manual file reads
+   (impact + source + review guidance in one call); `get_impact_radius` records
+   hub/bridge status; `crg_integration.py risky` gates commits — risk_score ≥ 0.7
+   or hub/bridge touch → defer instead of commit.
+
+4. **Structural verification (verify_round.md):** after each round,
+   `code-review-graph update` + `detect_changes` measures architectural
+   drift. Drift > 0.4 triggers the revert protocol; new untested functions
+   are auto-registered as `test_coverage` issues.
+
+**MCP tools used across all integration points:**
+
+| Tool | Integration point |
+|------|-------------------|
+| `get_minimal_context` | Step 2.5 + every Tier 3 eval + every fix |
+| `list_graph_stats` | Step 2.5 reconnaissance |
+| `get_suggested_questions` | Step 2.5 reconnaissance |
+| `get_hub_nodes` | Step 2.5 + architecture/readability/performance/docs |
+| `get_bridge_nodes` | Step 2.5 + architecture |
+| `list_communities` | Step 2.5 + architecture |
+| `get_community` | Step 2.5 + architecture |
+| `get_knowledge_gaps` | Step 2.5 + architecture |
+| `get_surprising_connections` | Step 2.5 + architecture |
+| `refactor_tool` (dead_code) | Step 2.5 reconnaissance |
+| `find_large_functions` | readability eval |
+| `list_flows` | performance + error_handling eval |
+| `get_flow` | performance + error_handling (drill-down) |
+| `get_affected_flows` | error_handling eval |
+| `semantic_search_nodes` | error_handling eval |
+| `generate_wiki` / `get_wiki_page` | documentation eval |
+| `get_docs_section` | documentation eval (targeted) |
+| `query_graph_tool` | Tier 3 (tests_for, callers_of, fan-in/out) |
+| `traverse_graph_tool` | Tier 3 (fan-in/out depth analysis) |
+| `get_review_context` | improvement_plan.md per-fix context |
+| `get_impact_radius` | improvement_plan.md safety gate |
+| `detect_changes` | verify_round.md structural drift |
+
+**Installation** (one-time, per target repo):
+```bash
+code-review-graph install --platform claude-code --repo <target>
+# Graph build is automatic — setup_target.py runs it on first session
+```
+
+---
+
+## Deep Integration Layer (`scripts/crg_analysis.py`)
+
+"Used" ≠ "deeply integrated." A CRG tool is **deeply integrated** when its
+output drives a deterministic decision — a formula, a threshold, a severity
+bucket — without LLM interpretation. The deep-integration layer lives in
+`scripts/crg_analysis.py` and produces `.sessi-work/crg_metrics.json`,
+consumed directly by `score.py` and the prompts.
 
 **6 Deep Integration Points:**
 
-| # | Signal | Deterministic output | Consumer |
-|---|--------|----------------------|-----------|
-| 1 | `risk_score` | `eval_depth` = `deep` / `standard` / `fast` | evaluate_dimension.md |
-| 2 | community cohesion | architecture sub-score 0–100 | score.py (min-with-tool) |
-| 3 | flow coverage | error_handling sub-score 0–100 | score.py (min-with-tool) |
-| 4 | dead-code ratio | `escalate_severity` low→medium if >5% | improvement_plan.md |
-| 5 | hub fan-in | severity bucket critical/high/medium/low | evaluate_dimension.md |
-| 6 | suggested questions | auto-seeded registry issues via severity map | crg_reconnaissance.md |
+| # | Signal              | Deterministic output                         | Consumer                |
+|---|---------------------|----------------------------------------------|-------------------------|
+| 1 | `risk_score`        | `eval_depth` = `deep` / `standard` / `fast`  | evaluate_dimension.md   |
+| 2 | community cohesion  | architecture sub-score 0–100                 | score.py (min-with-tool)|
+| 3 | flow coverage       | error_handling sub-score 0–100               | score.py (min-with-tool)|
+| 4 | dead-code ratio     | `escalate_severity` low→medium if >5%        | improvement_plan.md     |
+| 5 | hub fan-in          | severity bucket critical/high/medium/low     | evaluate_dimension.md   |
+| 6 | suggested questions | auto-seeded registry issues via severity map | crg_reconnaissance.md   |
 
 All thresholds are explicit and ENV-overridable (`CRG_RISK_DEEP`,
 `CRG_COHESION_HEALTHY`, etc.) — see `prompts/crg_reconnaissance.md §Step 11` for
@@ -355,14 +425,6 @@ python3 scripts/crg_analysis.py thresholds
 The contract for sub-score folding is `score = min(tool_score, crg_score)` —
 CRG can **only pull a dimension score down**, never inflate it. This
 prevents the failure mode where a lint-clean repo hides broken architecture.
-
-**CRG Availability Check:**
-- `code-review-graph` binary installed at `/opt/homebrew/bin/code-review-graph`
-- Graph built: `.code-review-graph/graph.db` exists
-- If graph not built: `setup_target.py` auto-builds it (no manual step needed)
-
-Framework **gracefully degrades** without CRG — all integration points skip
-silently; only token efficiency and structural verification are lost.
 
 ---
 
