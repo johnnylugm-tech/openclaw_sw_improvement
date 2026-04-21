@@ -144,7 +144,7 @@ The Agent writes JSON to `.sessi-work/round_<n>/scores/<dimension>.json`:
   "dimension": "architecture",
   "round": 1,
   "llm_tier": 3,
-  "llm_provider": "claude_native",
+  "llm_provider": "default",
   "tool_score": 72,
   "llm_score": 70,
   "score": 70,

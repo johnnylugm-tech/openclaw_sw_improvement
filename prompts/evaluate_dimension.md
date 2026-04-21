@@ -33,13 +33,11 @@ python3 scripts/llm_router.py <dimension> [tool_output.txt]
 
 Read the `tier` and `provider` fields:
 
-| Tier | Provider | Dimensions | Action |
-|------|----------|-----------|--------|
-| 1 | `default` | linting, type_safety, test_coverage, secrets_scanning, license_compliance, mutation_testing | Use default LLM (agent) |
-| 2 | `default` | security | Use default LLM (agent) |
-| 3 | `claude_native` | architecture, readability, error_handling, documentation, performance | Use Agent reasoning (this session) |
-
-**NEVER** use Claude for Tier 1/2 dimensions. **NEVER** use Gemini for Tier 3.
+| Tier | Dimensions | Action |
+|------|-----------|--------|
+| 1 | linting, type_safety, test_coverage, secrets_scanning, license_compliance, mutation_testing | Use default LLM (agent) |
+| 2 | security | Use default LLM (agent) |
+| 3 | architecture, readability, error_handling, documentation, performance | Use Agent reasoning (this session) |
 
 ---
 
@@ -152,7 +150,7 @@ Parse the JSON response. The response IS the dimension score.
 
 ---
 
-### IF Tier 3 → Evaluate with Claude (this session)
+### IF Tier 3 → Evaluate with Agent (this session)
 
 Read tool output from `.sessi-work/round_<n>/tools/<dimension>.txt`.
 
@@ -321,7 +319,7 @@ Prompt:
 
 **觸發條件**: `llm_score ≥ 85`
 
-當 Claude 準備給出 ≥ 85 的 Tier 3 分數時,**必須先完成以下三項確認**,
+當 Agent 準備給出 ≥ 85 的 Tier 3 分數時,**必須先完成以下三項確認**,
 否則分數上限強制設為 80。
 
 ```
@@ -358,7 +356,7 @@ Save to `.sessi-work/round_<n>/scores/<dimension>.json`:
   "dimension": "<name>",
   "round": <n>,
   "llm_tier": <1|2|3>,
-  "llm_provider": "gemini|claude_native",
+  "llm_provider": "default",
   "tool_score": <0-100>,
   "llm_score": <0-100>,
   "score": <min(tool_score, llm_score)>,
@@ -432,11 +430,11 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 
 ## Token Cost Reference
 
-| Tier | Provider | Typical cost/dim | Use case |
-|------|----------|-----------------|---------|
+| Tier | Typical cost/dim | Use case |
+|------|-----------------|---------|
 | 1 | MiniMax M2.7 | ~$0.001 | Tool summarization |
 | 2 | MiniMax M2.7 | ~$0.002 | Light judgment |
-| 3 | Claude Sonnet | ~$0.08 | Deep reasoning |
+| 3 | MiniMax M2.7 | ~$0.08 | Deep reasoning |
 
 **Total per round (12 dims + improve):**
 - Tier 1×6 + Tier 2×1: ~$0.01
