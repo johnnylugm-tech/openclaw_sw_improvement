@@ -18,7 +18,7 @@ from typing import Optional
 DIMENSIONS = {
     "linting": {
         "tool": "pylint",
-        "command": ["pylint", "{target}", "--output-format=json", "--disable=import-error", "--ignore=mutants"],
+        "command": ["pylint", "{target}/src", "--output-format=json", "--disable=import-error"],
         "score_type": "pylint_json",
         "weight": 0.06,
     },
@@ -36,7 +36,7 @@ DIMENSIONS = {
     },
     "security": {
         "tool": "bandit",
-        "command": ["bandit", "-r", "-f", "json", "-x", "**/mutants/**", "{target}"],
+        "command": ["bandit", "-r", "-f", "json", "-x", "**/mutants/**", "{target}/src"],
         "score_type": "bandit_json",
         "weight": 0.10,
     },
