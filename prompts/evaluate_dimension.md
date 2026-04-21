@@ -4,6 +4,25 @@ Evaluate a single quality dimension using the **tool-first hierarchy** and **LLM
 
 ---
 
+## Execution Contract (強制，每次執行前確認)
+
+> **這是行為紅線宣告，不可跳過。違反任一項，本步驟結果視為無效。**
+>
+> ❌ **禁止行為：**
+> - 未執行工具指令就填寫 `tool_score`（估分 = 造假）
+> - `tool_output_path` 為 null 時，使用 `llm_score` 作為最終分數
+> - findings[] 中填入無 `file:line` 或工具輸出支撐的項目
+> - Tier 3 維度給出 ≥ 85 分但未完成 Step 2c 高分確認清單
+> - 跳過工具執行步驟，直接進行 Step 2 LLM 評估
+>
+> ✅ **每個 score 文件必須滿足：**
+> - `tool_output_path`: 指向實際執行工具的輸出檔（不得為 null）
+> - `tool_outputs` 欄位: 必須包含工具指令輸出的原始路徑或內容摘要
+> - 若工具不可用（未安裝）→ `tool_score: null`，並在 score 文件標註原因
+> - `llm_score` 只能作為輔助；`score = min(tool_score, llm_score)` 規則強制執行
+
+---
+
 ## Step 0: Route to Correct LLM
 
 Before anything else, determine which LLM tier to use:
@@ -254,6 +273,78 @@ Then, per dimension, use the corresponding **CRG MCP tools** (available once
 **Graceful degradation:** If CRG is not installed or graph is empty, the
 evaluation still works — just with higher token cost. The framework must
 remain functional without CRG.
+
+---
+
+## Step 2b (Tier 3 ONLY): Devil's Advocate 交叉挑戰
+
+> **目的**: 用不同模型主動挑戰 Claude 自己的評估，防止自我感覺良好。  
+> **執行時機**: Claude 完成 Step 2a 評估、寫出初稿 findings 之後，寫入 score 文件之前。
+
+```
+[USE mcp__gemini-cli__ask-gemini]
+model: gemini-2.5-flash
+prompt: |
+  你是一位挑剔的資深 code reviewer，擅長找出評估者忽視的問題。
+  以下是一份針對 <dimension> 維度的程式碼品質評估結果。
+  
+  **你的任務是主動反駁這份評估，找出它的缺陷：**
+  1. 列出 2–3 個「評估可能遺漏的嚴重問題」（要具體說明為何可能被忽略）
+  2. 分析分數是否有高估嫌疑：說明至少 1 個讓你懷疑分數過高的理由
+  3. 指出 1 個「若分數是準確的，評估中應該提及但未提及的正面證據」
+  
+  回覆格式：
+  {
+    "missed_issues": ["<issue1>", "<issue2>"],
+    "overestimation_risk": "<理由>",
+    "missing_positive_evidence": "<應提及但未提及的內容>",
+    "da_verdict": "challenged" | "confirmed"
+  }
+  
+  評估內容：
+  <將 Claude Step 2a 的完整 findings[] 和 llm_score 貼入>
+```
+
+**DA 裁決規則（確定性，不得 LLM 主觀覆蓋）：**
+
+| DA 結果 | 動作 |
+|---------|------|
+| `missed_issues` ≥ 2 個具體問題 | `llm_score` 降 10 分，將問題加入 `findings[]`，severity=medium |
+| `da_verdict: "challenged"` | 在 score 文件加 `"da_challenge": true` 標記 |
+| `overestimation_risk` 非空且有具體理由 | `llm_score` 降 5 分 |
+| `da_verdict: "confirmed"` 且無具體 missed_issues | 正常繼續，記錄 `"da_challenge": false` |
+
+---
+
+## Step 2c (Tier 3 ONLY): 高分確認清單（Anti-Inflation Gate）
+
+**觸發條件**: `llm_score ≥ 85`
+
+當 Claude 準備給出 ≥ 85 的 Tier 3 分數時，**必須先完成以下三項確認**，
+否則分數上限強制設為 80。
+
+```
+高分確認清單（三選三，全部必填）：
+
+1. 負空間證明（Negative Space Proof）:
+   「在這個 repo 中，我明確檢查了以下問題但確認不存在：
+   - [問題A]：未發現，原因是 [具體原因]
+   - [問題B]：未發現，原因是 [具體原因]
+   至少 2 項具體問題」
+
+2. CRG 結構佐證（若 CRG 可用）:
+   「與高分一致的結構性證據：
+   - hub node <X> 的 fan-in=<N>，且在 knowledge_gaps 中未出現
+   - community <Y> 的 cohesion=<0.X>，屬於健康範圍
+   至少引用 1 個 CRG 數據點」
+
+3. 工具分佐證:
+   「tool_score = <N>（來自 <tool_name> 輸出），
+   與 llm_score 差距 < 10，符合 min() 規則不會被大幅壓低」
+```
+
+若 `llm_score ≥ 85` 但三項確認任一缺失 → 強制將 `llm_score` 降至 `80`，
+並在 score 文件加 `"inflation_capped": true`。
 
 ---
 

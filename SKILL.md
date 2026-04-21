@@ -1,65 +1,8 @@
-# Auto-Research Quality Improvement Skill (OpenClaw Version)
+# Auto-Research Quality Improvement Skill
 
 Implements an auto-research-style quality improvement loop for GitHub repos or local folders, with configurable targets across 12 core + 5 optional dimensions.
 
 **Design principle:** The goal is **actual quality improvement** — resolving every critical/high issue found — not reaching a numeric score. Scores are a minimum gate; the issue registry is the source of truth for completion.
-
-## Metadata
-
-- **name**: openclaw_sw_improvement
-- **description**: Automated software quality improvement via structured tool evaluation, issue tracking, and CRG-powered structural analysis loops
-- **trigger phrases**:
-  - "run quality loop"
-  - "improve code quality"
-  - "quality improvement"
-  - "software improvement"
-  - "start quality analysis"
-  - "run sw improvement"
-  - "quality scan"
-  - "軟體品質提升"
-  - "SW improvement"
-- **source**: `/tmp/openclaw_sw_improvement/` or GitHub `johnnylugm-tech/openclaw_sw_improvement`
-
----
-
-## 對話式互動（核心設計）
-
-**人類不需要任何 command line 操作。** 人類只說要做什麼，Agent 讀這份文件後自動執行所有步驟，最後回報結果。
-
-### 觸發範例
-
-```
-Human: "quality improvement on https://github.com/user/repo"
-Human: "SW improvement on /path/to/my/project"
-Human: "軟體品質提升"
-```
-
-### Agent 內部執行（完整流程）
-
-```
-Human: "quality improvement on https://github.com/user/repo"
-     ↓
-Agent（我，身為 LLM）:
-  1. 讀 SKILL.md（這份文件）→ 了解完整執行規格
-  2. 讀 prompts/ 目錄下的所有 prompt 檔案
-  3. 執行 Step 1 → config.yaml → config.json
-  4. 執行 Step 2 → setup_target.py（clone + CRG auto-build）
-  5. 執行 Step 2.5 → CRG structural reconnaissance（若 CRG 可用）
-  6. 執行 Step 3（最多 3 輪）:
-     3a. 執行 12 dims evaluation（dimension_executor.py + evaluate_dimension.md prompt）
-     3b. score.py 計算加權分數
-     3c. verify.py 防 bias 驗證
-     3d. checkpoint.py 存檔 + git tag round-<n>
-     3e. quality_complete 檢查
-         → 分數 >= 85 AND 無 open critical/high → 完成
-         → 否則 → 3f
-     3f. 依 severity 順序修復 open issues（LLM 直接改 code）
-  7. 執行 Step 4 → report_gen.py 生成最終報告
-  8. git tag v2.0（若 quality_complete=true）
-  9. 向 Human 回報結果
-```
-
----
 
 ## Execution Contract
 
@@ -130,13 +73,13 @@ Each round: **3a-evaluate → 3b-score → 3c-verify → 3d-checkpoint → 3e-ea
 - Snapshot: round_<n>.json with all scores, findings, deltas (via `checkpoint.py`)
 - Mark improvements per dimension
 - Persist `issue_registry.json` snapshot into round folder for audit
-- **Execute: `git tag round-<n>` on the target repo** (not automatic — Agent 执行)
+- Claude executes: `git tag round-<n>` on the target repo (not automatic)
 - Changes remain local only — no automatic `git push` to remote
 - Output: markdown summary for dashboard
 
 > **Commit timing:**
-> - Per-fix: one `git commit` per issue fixed (in Step 3f, called by Agent)
-> - Per-round: one `git tag round-<n>` (in Step 3d, called by Agent)
+> - Per-fix: one `git commit` per issue fixed (in Step 3f, called by Claude)
+> - Per-round: one `git tag round-<n>` (in Step 3d, called by Claude)
 > - Never automatic push — user decides when to push to remote
 
 **3e. Early-Stop Check (Issue-Driven)**
@@ -161,7 +104,7 @@ ELSE:
     → proceed to 3f
 ```
 
-Saturation detection — **Agent must call this explicitly**:
+Saturation detection — **Claude must call this explicitly**:
 ```bash
 python3 scripts/issue_tracker.py saturation \
   .sessi-work/issue_registry.json <current_round>
@@ -233,8 +176,6 @@ python3 scripts/report_gen.py \
    - `fail` — regressions detected or score dropped below baseline
 6. **Evidence** — citations to commits (`git log --oneline`) and tool outputs.
 
----
-
 ## Default Configuration
 
 - **Rounds:** 3 (max)
@@ -245,8 +186,6 @@ python3 scripts/report_gen.py \
 - **Evidence threshold:** 10 points
 - **Bias cap:** Δ +3 without diff evidence
 
----
-
 ## Tool Hierarchy
 
 ```
@@ -255,56 +194,43 @@ final_score = min(tool_score, llm_score)
 
 This prevents LLM from inflating scores when tools say otherwise.
 
----
-
 ## Dimension System
 
 **12 Core Dimensions (all enabled by default):**
-
-| Dimension | Tool | Weight | Target | Description |
-|-----------|------|--------|--------|-------------|
-| linting | pylint | 0.06 | 95 | Python lint and style issues |
-| type_safety | mypy | 0.10 | 95 | Static type checking |
-| test_coverage | pytest --cov | 0.13 | 80 | Code coverage by tests |
-| security | bandit | 0.10 | 90 | Security vulnerability scanning |
-| performance | (custom) | 0.07 | 80 | Performance anti-patterns |
-| architecture | cloc + CRG | 0.07 | 80 | Code structure and modularity |
-| readability | radon | 0.06 | 85 | Code complexity metrics |
-| error_handling | (grep-based) | 0.09 | 85 | Exception handling patterns |
-| documentation | (grep-based) | 0.10 | 85 | Docstring coverage |
-| secrets_scanning | gitleaks | 0.08 | 100 | Hardcoded secrets detection |
-| mutation_testing | pytest --gremlins --gremlins-executor=subprocess | 0.08 | 70 | Mutation testing coverage |
-| license_compliance | scancode | 0.06 | 95 | License header compliance |
+- linting
+- type_safety
+- test_coverage
+- security
+- performance
+- architecture
+- readability
+- error_handling
+- documentation
+- secrets_scanning
+- mutation_testing
+- license_compliance
 
 **5 Extended Dimensions (optional, disabled by default):**
+- property_testing
+- fuzzing
+- accessibility
+- observability
+- supply_chain_security
 
-| Dimension | Tool | Weight | Target |
-|-----------|------|--------|--------|
-| property_testing | (custom) | 0.07 | 75 |
-| fuzzing | (custom) | 0.08 | 70 |
-| accessibility | (custom) | 0.06 | 85 |
-| observability | (custom) | 0.05 | 80 |
-| supply_chain_security | (custom) | 0.06 | 80 |
-
----
+See `docs/EXTENDED_DIMENSIONS.md` for prerequisites and integration.
 
 ## Output Structure
 
 ```
 .sessi-work/
-├── quality_state.json       ← current state (for resume)
-├── config.json              ← resolved config
-├── crg_status.json         ← CRG availability + node count
-├── crg_reconnaissance.json ← 9 CRG commands output
-├── crg_metrics.json        ← structured metrics (6 deep points)
-├── issue_registry.json      ← persistent issue tracking
 ├── round_1/
 │   ├── scores/
 │   │   ├── linting.json
 │   │   ├── type_safety.json
-│   │   └── ... (all 12 dimensions)
+│   │   └── ...
 │   ├── tools/
-│   │   └── linting.txt (raw tool output)
+│   │   ├── linting.txt (raw tool output)
+│   │   └── ...
 │   ├── round_1.json (snapshot)
 │   └── round_1.md (summary)
 ├── round_2/
@@ -312,28 +238,79 @@ This prevents LLM from inflating scores when tools say otherwise.
 └── final_report.md
 ```
 
----
+## Invocation
 
-## Anti-Bias Defenses
+**This framework runs exclusively via the Claude Code conversation window.**
+There is no standalone CLI command to launch it. Claude reads this SKILL.md as
+its instruction set and executes each step interactively.
 
-1. **Tool-first hierarchy:** Claims capped by tool scores
+### Starting a Quality Improvement Run
+
+Open Claude Code and say (example prompts):
+```
+"Please run the quality improvement skill on /path/to/repo"
+"Evaluate code quality for https://github.com/user/repo using config.yaml"
+"Run all 12 quality dimensions on the current project"
+```
+
+Claude will then execute Steps 1–4 from this document, calling CLI scripts
+where needed. The Python scripts are called by Claude as shell commands —
+they are not invoked directly by users.
+
+### CLI Scripts (called by Claude, not by users directly)
+
+```bash
+# Step 1 — Claude calls these to resolve config + target
+python3 scripts/config_loader.py config.yaml
+python3 scripts/setup_target.py <github-url-or-local-path>
+
+# Step 3b — Claude calls this to compute weighted score
+python3 scripts/score.py .sessi-work/round_<n> config.json
+
+# Step 3c — Claude calls this for anti-bias verification
+python3 scripts/verify.py .sessi-work/round_<n>/result.json .sessi-work/round_<n> <repo_path>
+
+# Step 3d — Claude calls this to snapshot the round
+python3 scripts/checkpoint.py round <n> scores.json <overall_score>
+
+# Step 4 — Claude calls this to generate the final report
+python3 scripts/report_gen.py <repo_path> .sessi-work .sessi-work/issue_registry.json <score_gate> .sessi-work/final_report.md
+```
+
+### Prompts (read and followed by Claude, not executed as commands)
+
+- `prompts/evaluate_dimension.md` — Claude follows this protocol for each dimension
+- `prompts/improvement_plan.md` — Claude follows this to plan and apply fixes
+- `prompts/verify_round.md` — Claude follows this for cross-dimension regression checks
+- `prompts/final_report.md` — Claude follows this to produce the final report
+
+## Anti-Bias Defenses (12 Layers)
+
+Defends against: laziness (偷懶), shortcuts (走捷徑), hallucination (幻覺/說謊), self-congratulation (自我感覺良好).
+
+**Original 7 layers:**
+1. **Tool-first hierarchy:** `final_score = min(tool_score, llm_score)`
 2. **Evidence requirement:** Every finding needs tool output or code diff
 3. **Per-fix re-verification:** Revert if tool shows no improvement
-4. **Deterministic verification:** quantitative comparison pre/post
-5. **Regression detection:** surface changes that hurt dimensions
+4. **Deterministic verification (verify.py):** quantitative comparison pre/post, cap unsupported gains
+5. **Regression detection:** surface changes that hurt other dimensions
 6. **Path heuristics:** prevent undetected regressions
-7. **Structural drift detection (CRG):** catches architectural regressions
-   that dimension tools cannot see — new hub nodes, expanded test gaps,
-   risk-score jumps across rounds
+7. **Structural drift detection (CRG):** architectural regression via risk-score + hub graph
 
----
+**New 5 layers (v3.1):**
+8. **Execution Contract:** behavioral red lines declared at prompt start — skip = invalid output
+9. **Devil's Advocate:** Gemini Flash challenges Tier 3 findings before score write; deterministic penalty rules
+10. **High-Score Confirmation Gate:** `llm_score ≥ 85` requires negative space proof + CRG evidence + tool alignment; else capped at 80
+11. **Fix Verification Enforcement Gate:** `mark_fixed()` raises `ValueError` without `commit_sha` + `tool_rerun_path` for tool-verifiable dims
+12. **Self-Consistency Uncertainty Gate:** `verify.py` flags Δ > 15 with < 3 evidence pieces, tool/LLM divergence > 20 pts, high scores bypassing Step 2c
+
+See `docs/ANTI_BIAS.md` for detailed analysis.
 
 ## Code Review Graph Integration
 
-When CRG is installed, **four integration points** activate automatically
-(22 of 27 MCP tools utilized, 6 with deep-integration formulas — see `scripts/crg_analysis.py`):
-
-**4 CRG Integration Points:**
+When [Code Review Graph](https://github.com/code-review-graph) (CRG) is installed,
+**four integration points** activate automatically (24 of 27 MCP tools utilized,
+6 with deep-integration formulas — see `crg_analysis.py`):
 
 1. **Structural reconnaissance (crg_reconnaissance.md — Step 2.5):** runs once
    per session before the first evaluation round. Uses `get_minimal_context`,
@@ -356,14 +333,14 @@ When CRG is installed, **four integration points** activate automatically
    or hub/bridge touch → defer instead of commit.
 
 4. **Structural verification (verify_round.md):** after each round,
-   `code-review-graph update` + `detect_changes` measures architectural
+   `code-review-graph update` + `detect_changes_tool` measures architectural
    drift. Drift > 0.4 triggers the revert protocol; new untested functions
    are auto-registered as `test_coverage` issues.
 
 **MCP tools used across all integration points:**
 
 | Tool | Integration point |
-|------|-------------------|
+|------|------------------|
 | `get_minimal_context` | Step 2.5 + every Tier 3 eval + every fix |
 | `list_graph_stats` | Step 2.5 reconnaissance |
 | `get_suggested_questions` | Step 2.5 reconnaissance |
@@ -379,10 +356,11 @@ When CRG is installed, **four integration points** activate automatically
 | `get_flow` | performance + error_handling (drill-down) |
 | `get_affected_flows` | error_handling eval |
 | `semantic_search_nodes` | error_handling eval |
+| `get_architecture_overview` | architecture eval (layering + module map) |
 | `generate_wiki` / `get_wiki_page` | documentation eval |
 | `get_docs_section` | documentation eval (targeted) |
 | `query_graph_tool` | Tier 3 (tests_for, callers_of, fan-in/out) |
-| `traverse_graph_tool` | Tier 3 (fan-in/out depth analysis) |
+| `traverse_graph_tool` | Tier 3 (fan-in/fan-out depth analysis) |
 | `get_review_context` | improvement_plan.md per-fix context |
 | `get_impact_radius` | improvement_plan.md safety gate |
 | `detect_changes` | verify_round.md structural drift |
@@ -390,12 +368,17 @@ When CRG is installed, **four integration points** activate automatically
 **Installation** (one-time, per target repo):
 ```bash
 code-review-graph install --platform claude-code --repo <target>
+# Restart Claude Code to load .mcp.json
 # Graph build is automatic — setup_target.py runs it on first session
 ```
 
----
+Framework **gracefully degrades** without CRG — all integration points skip
+silently; only token efficiency and structural verification are lost.
 
-## Deep Integration Layer (`scripts/crg_analysis.py`)
+> **Full reference:** `docs/CRG_DEEP_INTEGRATION.md` — complete workflow
+> diagram, 6 deep-integration points, threshold table, data-flow map.
+
+### Deep Integration Layer (`scripts/crg_analysis.py`)
 
 "Used" ≠ "deeply integrated." A CRG tool is **deeply integrated** when its
 output drives a deterministic decision — a formula, a threshold, a severity
@@ -403,7 +386,7 @@ bucket — without LLM interpretation. The deep-integration layer lives in
 `scripts/crg_analysis.py` and produces `.sessi-work/crg_metrics.json`,
 consumed directly by `score.py` and the prompts.
 
-**6 Deep Integration Points:**
+**Six concrete deep-integration points:**
 
 | # | Signal              | Deterministic output                         | Consumer                |
 |---|---------------------|----------------------------------------------|-------------------------|
@@ -415,7 +398,7 @@ consumed directly by `score.py` and the prompts.
 | 6 | suggested questions | auto-seeded registry issues via severity map | crg_reconnaissance.md   |
 
 All thresholds are explicit and ENV-overridable (`CRG_RISK_DEEP`,
-`CRG_COHESION_HEALTHY`, etc.) — see `prompts/crg_reconnaissance.md §Step 11` for
+`CRG_COHESION_HEALTHY`, etc.) — see `crg_reconnaissance.md §Step 11` for
 the full table. Inspect effective values:
 
 ```bash
@@ -426,101 +409,8 @@ The contract for sub-score folding is `score = min(tool_score, crg_score)` —
 CRG can **only pull a dimension score down**, never inflate it. This
 prevents the failure mode where a lint-clean repo hides broken architecture.
 
----
-
-## Prompts (Agent reads and follows these, not executed as commands)
-
-- `prompts/evaluate_dimension.md` — Agent follows this protocol for each dimension
-- `prompts/improvement_plan.md` — Agent follows this to plan and apply fixes
-- `prompts/verify_round.md` — Agent follows this for cross-dimension regression checks
-- `prompts/crg_reconnaissance.md` — Agent follows this for CRG structural analysis
-- `prompts/final_report.md` — Agent follows this to produce the final report
-
----
-
-## CLI Scripts (called by Agent, not by human directly)
-
-```bash
-# Step 1 — Agent calls these to resolve config + target
-python3 scripts/config_loader.py config.yaml
-python3 scripts/setup_target.py <github-url-or-local-path>
-
-# Step 2.5 — Agent calls this to run CRG reconnaissance
-python3 scripts/crg_analysis.py run_reconnaissance <repo_path> <work_dir>
-
-# Step 3a — Agent calls this to evaluate all dimensions
-python3 scripts/dimension_executor.py --all --repo <repo_path> --work-dir .sessi-work
-
-# Step 3b — Agent calls this to compute weighted score
-python3 scripts/score.py .sessi-work/round_<n> config.json
-
-# Step 3c — Agent calls this for anti-bias verification
-python3 scripts/verify.py .sessi-work/round_<n>/result.json .sessi-work/round_<n> <repo_path>
-
-# Step 3d — Agent calls this to snapshot the round
-python3 scripts/checkpoint.py round <n> scores.json <overall_score>
-
-# Step 3e — Agent calls this for saturation check
-python3 scripts/issue_tracker.py saturation .sessi-work/issue_registry.json <current_round>
-
-# Step 4 — Agent calls this to generate the final report
-python3 scripts/report_gen.py <repo_path> .sessi-work .sessi-work/issue_registry.json <score_gate> .sessi-work/final_report.md
-```
-
----
-
-## Graceful Degradation
-
-| Missing component | Behavior |
-|-------------------|----------|
-| CRG not installed | Skip structural analysis, tool-only evaluation |
-| Tool not installed | Dimension returns `status: "skip"`, score = 100 |
-| Config not found | Use built-in defaults |
-| Issue tracker unavailable | Pure score calculation, no issue tracking |
-
----
-
-## Error Handling
-
-- Tool not found → `status: "skip"`, score = 100
-- Tool timeout → `status: "error"`, score = 0
-- Score computation failure → fallback to direct tool score average
-- CRG graph build failure → log warning, continue without CRG
-
----
-
-## 與人類對話時的輸出格式
-
-Agent 完成後，向人類報告：
-
-```
-✅ Quality Loop 完成（第 N 輪）
-
-📊 分數：78/85（落後 7 分）
-🔴 Open issues：3 critical, 2 high, 5 medium
-
-┌─────────────────────────┬────────┬────────┐
-│ Dimension               │ Score  │ Target │
-├─────────────────────────┼────────┼────────┤
-│ test_coverage           │ 62     │ 80     │ ← failing
-│ security                │ 71     │ 90     │ ← failing
-│ documentation          │ 74     │ 85     │ ← failing
-│ ...                    │        │        │
-└─────────────────────────┴────────┴────────┘
-
-🔧 Top Issues:
-  🔴 [critical] bandit: hardcoded_password — auth.py:47
-  🔴 [critical] bandit: hardcoded_password — config.py:22
-  🔴 [high] bandit: 6 more secrets found
-
-📁 報告位置：.sessi-work/final_report.md
-```
-
----
-
 ## References
 
 - Framework: Based on Karpathy's autoresearch pattern
 - Quality model: Harness Engineering 12-dimension weighted scoring
-- Implementation: OpenClaw skill with Python orchestration + LLM evaluation steps
-- CRG: [code-review-graph](https://github.com/code-review-graph) for structural analysis
+- Implementation: Claude Code skill with Python orchestration + LLM evaluation steps

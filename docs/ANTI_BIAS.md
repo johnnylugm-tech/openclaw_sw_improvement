@@ -18,7 +18,7 @@ But the claimed improvement might be:
 - Ornamental (no functional change)
 - Deceptive (claimed fixes for one dimension hurt another)
 
-## Solution: 7-Layer Defense
+## Solution: 12-Layer Defense
 
 ### 1. Tool-First Hierarchy
 
@@ -187,6 +187,130 @@ python3 scripts/crg_integration.py risky . HEAD 0.7
 **Graceful degradation:** If CRG is not installed this defense is skipped
 silently. Defenses 1–6 remain fully active.
 
+---
+
+### 8. Execution Contract (Behavioral Red Lines)
+
+Declares hard constraints at the start of each prompt — before the agent does
+anything — so rule violations are caught at prompt-read time, not after bad
+output is already written.
+
+**Implementation:** Added as a mandatory block at the top of both
+`evaluate_dimension.md` and `improvement_plan.md`:
+
+```
+❌ 禁止行為:
+- 未執行工具指令就填寫 tool_score（估分 = 造假）
+- tool_output_path 為 null 時，使用 llm_score 作為最終分數
+- findings[] 中填入無 file:line 或工具輸出支撐的項目
+- Tier 3 維度給出 ≥ 85 分但未完成 Step 2c 高分確認清單
+- 跳過工具執行步驟，直接進行 Step 2 LLM 評估
+```
+
+**Effect:** Prevents laziness and tool-skipping before the agent starts
+reasoning — the contract is declared once per evaluation, not hidden in
+the middle of long instructions.
+
+---
+
+### 9. Devil's Advocate Cross-Check (DA)
+
+After completing a Tier 3 evaluation and before writing the score file,
+Claude sends its findings to **Gemini Flash** as a challenger — a different
+model that has no stake in Claude's conclusions.
+
+**Trigger:** Tier 3 dimensions (architecture, readability, error_handling,
+documentation, performance) after Step 2a CRG analysis.
+
+**Gemini Flash prompt:** "你是挑剔的 code reviewer，主動反駁這份評估"  
+→ returns structured JSON: `missed_issues`, `overestimation_risk`, `da_verdict`
+
+**Deterministic scoring adjustments (not LLM-discretionary):**
+
+| DA output | Score adjustment |
+|-----------|-----------------|
+| `missed_issues ≥ 2` | `llm_score -= 10`; add issues to findings[] at medium severity |
+| `overestimation_risk` non-empty | `llm_score -= 5` |
+| `da_verdict: "challenged"` | add `da_challenge: true` to score file |
+| `da_verdict: "confirmed"`, no issues | add `da_challenge: false`, continue |
+
+**Effect:** Systematic adversarial pressure from an independent model —
+prevents "自我感覺良好" (self-congratulation) after complex evaluation.
+
+---
+
+### 10. High-Score Confirmation Gate (Anti-Inflation)
+
+When `llm_score ≥ 85` for a Tier 3 dimension, Claude must complete a
+three-part confirmation checklist. Missing any part forces the score to 80.
+
+**Checklist (all three required):**
+
+1. **Negative Space Proof** — explicitly list 2+ known problem patterns
+   that were checked and confirmed absent (not just "nothing found")
+2. **CRG Structural Evidence** — cite ≥1 numeric CRG data point consistent
+   with a high score (e.g., `hub_node X: fan_in=3, not in knowledge_gaps`)
+3. **Tool Score Alignment** — `tool_score` exists and diverges from
+   `llm_score` by < 10 points
+
+If any check is missing: `llm_score` → `80`, `inflation_capped: true` added
+to score file.
+
+**Effect:** Makes it structurally difficult to give ≥ 85 without substantive
+evidence — the burden of proof scales with the claim.
+
+---
+
+### 11. Fix Verification Enforcement Gate (Runtime Integrity)
+
+`mark_fixed()` in `issue_tracker.py` now enforces that fixes include
+verifiable evidence before they're recorded:
+
+**Gate 1 (all dimensions):** `commit_sha` must be non-empty.  
+**Gate 2 (tool-verifiable dimensions):** `tool_rerun_path` must point to
+actual tool output after the fix.
+
+```python
+TOOL_VERIFIABLE_DIMS = {
+    "linting", "type_safety", "test_coverage", "security",
+    "secrets_scanning", "license_compliance", "mutation_testing",
+}
+# Calling mark_fixed() without tool_rerun_path for these dims raises ValueError
+```
+
+**Effect:** Makes it impossible to log a fix without proving the tool
+confirms the issue is gone — directly prevents "mark fixed without checking."
+
+---
+
+### 12. Self-Consistency Uncertainty Gate
+
+`verify.py` now runs `self_consistency_gate()` for every dimension,
+detecting three additional failure modes that the existing evidence-cap
+(Defense 4) cannot catch:
+
+| Check | Trigger | Action |
+|-------|---------|--------|
+| Large jump | Δ > 15 pts with < 3 evidence pieces | cap score to `prev + 15`, add `consistency_capped: true` |
+| High score bypass | `llm_score ≥ 85` but `da_challenge` and `inflation_capped` both absent | warn (logged in `consistency_flags`) |
+| Contradictory signals | `abs(llm_score - tool_score) > 20` | warn (logged in `consistency_flags`) |
+
+```bash
+# consistency_flags in verify output:
+"consistency_flags": [
+  {
+    "dimension": "architecture",
+    "reason": "score jumped +18 pts but only 1/3 evidence pieces found.",
+    "action": "cap",
+    "cap_to": 72
+  }
+]
+```
+
+**Effect:** Catches scenarios where multiple individual checks pass but the
+overall claim is statistically implausible — a final layer that treats the
+score trajectory itself as a signal.
+
 ## Evidence Threshold Analysis
 
 ### Standard Configuration (12 core dimensions)
@@ -342,4 +466,10 @@ python3 scripts/verify.py result.json round_1 .
 
 ## Conclusion
 
-The 7-layer defense provides strong protection against self-evaluation bias while maintaining practical improvement capability. The framework can automate 70-75% of quality improvements with 12 core dimensions, reaching 80%+ with extended dimensions. Beyond that, human judgment and domain expertise remain essential.
+The 12-layer defense provides strong protection against the four primary AI agent failure modes — laziness (偷懶), shortcuts (走捷徑), hallucination/lying (幻覺/說謊), and self-congratulation (自我感覺良好) — while maintaining practical improvement capability.
+
+**Layers 1–7** (original): tool-first hierarchy, evidence requirements, per-fix verification, deterministic verification caps, regression detection, path guardrails, CRG structural drift detection.
+
+**Layers 8–12** (new, v3.1): Execution Contract (behavioral red lines), Devil's Advocate cross-check (independent model challenge), High-Score Confirmation Gate (anti-inflation), Fix Verification Enforcement Gate (runtime integrity), Self-Consistency Uncertainty Gate (statistical implausibility detection).
+
+The framework can automate 70-75% of quality improvements with 12 core dimensions, reaching 80%+ with extended dimensions. Beyond that, human judgment and domain expertise remain essential.

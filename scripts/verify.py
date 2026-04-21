@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/python3.12
+#!/usr/bin/env python3
 """
 Verification: Deterministic anti-bias check that caps unsupported claims
 
@@ -15,6 +15,11 @@ from pathlib import Path
 EVIDENCE_THRESHOLD = 10  # Points that require diff/tool evidence
 CAP_DELTA = 3  # Max Δ without diff evidence
 TOOL_DIFF_MIN_LINES = 3  # Min lines of diff for evidence
+
+# Self-consistency gate constants
+CONSISTENCY_JUMP_THRESHOLD = 15   # Score jump requiring ≥3 diff-backed evidence pieces
+CONSISTENCY_HIGH_SCORE_MIN = 85   # Scores ≥ this require inflation_capped check
+CONSISTENCY_MIN_EVIDENCE_PIECES = 3  # Min evidence required for large jumps
 
 
 def get_git_diff(repo_path, since_commit="HEAD~1"):
@@ -72,6 +77,88 @@ def load_pre_state(round_dir):
     return prev_state
 
 
+def self_consistency_gate(dim_result: dict, dim_name: str, previous_score: float,
+                          diff_lines: int) -> dict:
+    """
+    Self-Consistency Uncertainty Gate (Anti-Hallucination, Anti-Self-Congratulation).
+
+    Detects two failure modes:
+    1. Large score jumps (> CONSISTENCY_JUMP_THRESHOLD) without sufficient diff evidence
+    2. High scores (≥ CONSISTENCY_HIGH_SCORE_MIN) that lack inflation_capped marker
+       or have contradictory tool/llm signals
+
+    Returns:
+        {
+            "flagged": bool,
+            "reason": str,        # empty if not flagged
+            "action": str,        # "cap", "warn", "ok"
+            "cap_to": int | None, # if action == "cap"
+        }
+    """
+    current_score = dim_result.get("score", 0)
+    llm_score = dim_result.get("llm_score", current_score)
+    tool_score = dim_result.get("tool_score")
+    delta = current_score - previous_score
+    findings = dim_result.get("findings", [])
+
+    # --- Check 1: Large jump needs ≥3 diff-backed evidence pieces ---
+    if delta > CONSISTENCY_JUMP_THRESHOLD:
+        # Count evidence: tool output + diff lines + findings with evidence
+        evidence_count = 0
+        if dim_result.get("tool_outputs"):
+            evidence_count += 1
+        if diff_lines >= TOOL_DIFF_MIN_LINES:
+            evidence_count += 1
+        # Each finding with a non-empty evidence field counts as one piece
+        evidence_count += sum(1 for f in findings if f.get("evidence", "").strip())
+
+        if evidence_count < CONSISTENCY_MIN_EVIDENCE_PIECES:
+            return {
+                "flagged": True,
+                "reason": (
+                    f"{dim_name}: score jumped +{delta:.0f} pts but only "
+                    f"{evidence_count}/{CONSISTENCY_MIN_EVIDENCE_PIECES} evidence pieces found. "
+                    f"Large jumps require tool output + diff + ≥1 finding with evidence."
+                ),
+                "action": "cap",
+                "cap_to": int(previous_score + CONSISTENCY_JUMP_THRESHOLD),
+            }
+
+    # --- Check 2: High scores require negative space proof ---
+    if llm_score >= CONSISTENCY_HIGH_SCORE_MIN:
+        inflation_capped = dim_result.get("inflation_capped", False)
+        da_challenge = dim_result.get("da_challenge", None)
+
+        # If llm_score is high but inflation_capped check was bypassed
+        if not inflation_capped and da_challenge is None:
+            return {
+                "flagged": True,
+                "reason": (
+                    f"{dim_name}: llm_score={llm_score} ≥ {CONSISTENCY_HIGH_SCORE_MIN} "
+                    "but no Step 2c high-score confirmation found "
+                    "(inflation_capped and da_challenge fields both absent). "
+                    "High scores require negative space proof."
+                ),
+                "action": "warn",
+                "cap_to": None,
+            }
+
+    # --- Check 3: Contradictory signals (tool vs LLM diverge > 20pts) ---
+    if tool_score is not None and abs(llm_score - tool_score) > 20:
+        return {
+            "flagged": True,
+            "reason": (
+                f"{dim_name}: tool_score={tool_score} vs llm_score={llm_score} "
+                f"diverge by {abs(llm_score - tool_score):.0f} pts — contradictory signals. "
+                "Final score uses min(), but the gap indicates unreliable LLM judgment."
+            ),
+            "action": "warn",
+            "cap_to": None,
+        }
+
+    return {"flagged": False, "reason": "", "action": "ok", "cap_to": None}
+
+
 def verify(result_path, round_dir, repo_path):
     """
     Verify evaluation result against evidence
@@ -94,6 +181,7 @@ def verify(result_path, round_dir, repo_path):
     capped = []
     regressions = []
     evidence_ok = []
+    consistency_flags = []
 
     for dim_name, dim_result in result.items():
         if not isinstance(dim_result, dict):
@@ -102,6 +190,21 @@ def verify(result_path, round_dir, repo_path):
         current_score = dim_result.get("score", 0)
         previous_score = pre_state.get(dim_name, 0)
         delta = current_score - previous_score
+
+        # --- Self-consistency gate (runs for every dimension) ---
+        sc = self_consistency_gate(dim_result, dim_name, previous_score, diff_lines)
+        if sc["flagged"]:
+            consistency_flags.append({
+                "dimension": dim_name,
+                "reason": sc["reason"],
+                "action": sc["action"],
+                "cap_to": sc["cap_to"],
+            })
+            if sc["action"] == "cap" and sc["cap_to"] is not None:
+                result[dim_name]["score"] = sc["cap_to"]
+                result[dim_name]["consistency_capped"] = True
+                current_score = sc["cap_to"]
+                delta = current_score - previous_score
 
         # Check for suspicious gains
         if delta > 0:
@@ -154,6 +257,7 @@ def verify(result_path, round_dir, repo_path):
             "capped": capped,
             "regressions": regressions,
             "evidence_ok": evidence_ok,
+            "consistency_flags": consistency_flags,
         },
         "result": result,
     }
