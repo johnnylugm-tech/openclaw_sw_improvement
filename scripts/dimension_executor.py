@@ -78,7 +78,7 @@ DIMENSIONS = {
     },
     "mutation_testing": {
         "tool": "pytest",
-        "command": ["pytest", "{target}", "--gremlins", "--gremlins-executor=subprocess", "-q"],
+        "command": ["pytest", "{target}", "--gremlins", "--gremlin-executor=subprocess", "--gremlin-report=json", "-q"],
         "score_type": "gremlins_json",
         "weight": 0.08,
     },
@@ -239,24 +239,57 @@ def _parse_gitleaks_json(stdout: str) -> dict:
 
 
 def _parse_gremlins_json(stdout: str) -> dict:
-    """Parse pytest-gremlins JSON output (from coverage/gremlins/gremlins.json)."""
+    """Parse pytest-gremlins JSON output.
+
+    Gremlins can output JSON in two ways:
+    1. Inline JSON via --gremlin-report=json (stdout)
+    2. coverage/gremlins/gremlins.json file (keys: summary.total, summary.zapped)
+
+    Expected format: {summary: {total, zapped, survived, percentage}}
+    Or flat format: {total, killed}
+    """
     findings = []
+    # Try to parse as-is first (inline JSON)
     try:
         data = json.loads(stdout)
-        total = data.get("total", 0)
-        killed = data.get("killed", 0)
-        # Compute kill rate
+        # Normalize: handle {summary: {total, zapped, ...}} format
+        if "summary" in data:
+            total = data["summary"].get("total", 0)
+            killed = data["summary"].get("zapped", 0)
+        else:
+            total = data.get("total", 0)
+            killed = data.get("killed", 0)
         kill_rate = (killed / total * 100) if total > 0 else 0
-        # Score based on kill rate (target ~70%)
-        score = min(100, kill_rate)
         findings.append({
             "file": "mutation_summary",
             "line": 0,
             "message": f"Mutation testing: {killed}/{total} killed ({kill_rate:.1f}%)",
             "severity": "info",
         })
+        return findings
     except json.JSONDecodeError:
         pass
+    # Try reading from coverage/gremlins/gremlins.json
+    gremlins_file = Path("coverage/gremlins/gremlins.json")
+    if gremlins_file.exists():
+        try:
+            data = json.loads(gremlins_file.read_text())
+            if "summary" in data:
+                total = data["summary"].get("total", 0)
+                killed = data["summary"].get("zapped", 0)
+                kill_rate = data["summary"].get("percentage", 0)
+            else:
+                total = data.get("total", 0)
+                killed = data.get("killed", 0)
+                kill_rate = (killed / total * 100) if total > 0 else 0
+            findings.append({
+                "file": "mutation_summary",
+                "line": 0,
+                "message": f"Mutation testing: {killed}/{total} killed ({kill_rate:.1f}%)",
+                "severity": "info",
+            })
+        except (json.JSONDecodeError, OSError):
+            pass
     return findings
 
 
