@@ -106,4 +106,4 @@
 - Source（evaluate_dimension.md）：包含 "Gemini Flash challenges Tier 3" 明確提及
 - OpenClaw 版本：移除 provider 特定文字，改為 "Secondary LLM call challenges Tier 3"
 - 理由：OpenClaw 不走 Gemini MCP，抽象化為通用 LLM 描述
-- COMPARISON.md 記錄：⚠️ 僅間接覆蓋（見 Category 1: 平台移植差異），未明確標記
+- COMPARISON.md 記錄：✅ 本節（D4）已明確記錄（2026-04-23 補充）
