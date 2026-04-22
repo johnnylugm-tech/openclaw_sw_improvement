@@ -275,22 +275,22 @@ remain functional without CRG.
 
 ## Step 2b (Tier 3 ONLY): Devil's Advocate 交叉挑戰
 
-> **目的**: 用不同模型主動挑戰 Agent 自己的評估，防止自我感覺良好。
-> **執行時機**: Agent 完成 Step 2a 評估、寫出初稿 findings 之後，寫入 score 文件之前。
+> **目的**: 用不同模型主動挑戰 Agent 自己的評估,防止自我感覺良好。
+> **執行時機**: Agent 完成 Step 2a 評估、寫出初稿 findings 之後,寫入 score 文件之前。
 
 ```
 The Agent (or a secondary LLM call) challenges the findings from Step 2a:
 
 Prompt:
-| 你是一位挑剔的資深 code reviewer，擅長找出評估者忽視的問題。
+| 你是一位挑剔的資深 code reviewer,擅長找出評估者忽視的問題。
   以下是一份針對 <dimension> 維度的程式碼品質評估結果。
   
-  **你的任務是主動反駁這份評估，找出它的缺陷：**
-  1. 列出 2–3 個「評估可能遺漏的嚴重問題」（要具體說明為何可能被忽略）
-  2. 分析分數是否有高估嫌疑：說明至少 1 個讓你懷疑分數過高的理由
-  3. 指出 1 個「若分數是準確的，評估中應該提及但未提及的正面證據」
+  **你的任務是主動反駁這份評估,找出它的缺陷:**
+  1. 列出 2–3 個「評估可能遺漏的嚴重問題」(要具體說明為何可能被忽略)
+  2. 分析分數是否有高估嫌疑:說明至少 1 個讓你懷疑分數過高的理由
+  3. 指出 1 個「若分數是準確的,評估中應該提及但未提及的正面證據」
   
-  回覆格式：
+  回覆格式:
   {
     "missed_issues": ["<issue1>", "<issue2>"],
     "overestimation_risk": "<理由>",
@@ -298,7 +298,7 @@ Prompt:
     "da_verdict": "challenged" | "confirmed"
   }
   
-  評估內容：
+  評估內容:
   <將 Agent Step 2a 的完整 findings[] 和 llm_score 貼入>
 ```
 
@@ -317,19 +317,19 @@ Prompt:
 
 **觸發條件**: `llm_score ≥ 85`
 
-當 Agent 準備給出 ≥ 85 的 Tier 3 分數時，**必須先完成以下三項確認**，
+當 Agent 準備給出 ≥ 85 的 Tier 3 分數時,**必須先完成以下三項確認**,
 否則分數上限強制設為 80。
 
 ```
-高分確認清單（三選三，全部必填）：
+高分確認清單(三選三,全部必填):
 
-1. 負空間證明（Negative Space Proof）:
-   「在這個 repo 中，我明確檢查了以下問題但確認不存在：
-   - [問題A]：未發現，原因是 [具體原因]
-   - [問題B]：未發現，原因是 [具體原因]
+1. 負空間證明(Negative Space Proof):
+   「在這個 repo 中,我明確檢查了以下問題但確認不存在:
+   - [問題A]:未發現,原因是 [具體原因]
+   - [問題B]:未發現,原因是 [具體原因]
    至少 2 項具體問題」
 
-2. CRG 結構佐證（若 CRG 可用）：
+2. CRG 結構佐證(若 CRG 可用):
    「與高分一致的結構性證據:
    - hub node <X> 的 fan-in=<N>,且在 knowledge_gaps 中未出現
    - community <Y> 的 cohesion=<0.X>,屬於健康範圍
