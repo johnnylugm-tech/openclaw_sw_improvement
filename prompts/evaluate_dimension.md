@@ -130,7 +130,6 @@ radon cc src/ -j --min C 2>&1 | head -100  # Complex functions
 
 ### IF Tier 1 or Tier 2 → Use Default LLM (Agent)
 
-
 Get the prompt from the router:
 ```bash
 python3 scripts/llm_router.py <dimension> .sessi-work/round_<n>/tools/<dimension>.txt
@@ -142,7 +141,6 @@ Use `prompt` field from output. Call the default LLM:
 The Agent evaluates the dimension using the default LLM. Prompt from router:
 <prompt from router output>
 ```
-
 
 Parse the JSON response. The response IS the dimension score.
 
@@ -319,19 +317,19 @@ Prompt:
 
 **觸發條件**: `llm_score ≥ 85`
 
-當 Agent 準備給出 ≥ 85 的 Tier 3 分數時,**必須先完成以下三項確認**,
+當 Agent 準備給出 ≥ 85 的 Tier 3 分數時，**必須先完成以下三項確認**，
 否則分數上限強制設為 80。
 
 ```
-高分確認清單(三選三,全部必填):
+高分確認清單（三選三，全部必填）：
 
-1. 負空間證明(Negative Space Proof):
-   「在這個 repo 中,我明確檢查了以下問題但確認不存在:
-   - [問題A]:未發現,原因是 [具體原因]
-   - [問題B]:未發現,原因是 [具體原因]
+1. 負空間證明（Negative Space Proof）:
+   「在這個 repo 中，我明確檢查了以下問題但確認不存在：
+   - [問題A]：未發現，原因是 [具體原因]
+   - [問題B]：未發現，原因是 [具體原因]
    至少 2 項具體問題」
 
-2. CRG 結構佐證(若 CRG 可用):
+2. CRG 結構佐證（若 CRG 可用）：
    「與高分一致的結構性證據:
    - hub node <X> 的 fan-in=<N>,且在 knowledge_gaps 中未出現
    - community <Y> 的 cohesion=<0.X>,屬於健康範圍
@@ -356,7 +354,7 @@ Save to `.sessi-work/round_<n>/scores/<dimension>.json`:
   "dimension": "<name>",
   "round": <n>,
   "llm_tier": <1|2|3>,
-  "llm_provider": "default",
+  "llm_provider": "gemini|claude_native",
   "tool_score": <0-100>,
   "llm_score": <0-100>,
   "score": <min(tool_score, llm_score)>,
@@ -424,17 +422,17 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 2. Every finding needs `evidence` field - no bare assertions
 3. If tool gives no output (tool missing/error) → `tool_score = null`, use `llm_score` only, flag in score file
 4. Δ > 10 from previous round requires tool evidence or ≥ 3 lines of git diff
-5. Tier 1/2 evaluations: trust the tool output — LLM's role is only to parse and structure it
+5. Tier 1/2 evaluations: trust the tool output - Gemini's role is only to parse and structure it
 
 ---
 
 ## Token Cost Reference
 
-| Tier | Typical cost/dim | Use case |
-|------|-----------------|---------|
-| 1 | MiniMax M2.7 | ~$0.001 | Tool summarization |
-| 2 | MiniMax M2.7 | ~$0.002 | Light judgment |
-| 3 | MiniMax M2.7 | ~$0.08 | Deep reasoning |
+| Tier | Provider | Typical cost/dim | Use case |
+|------|----------|-----------------|---------|
+| 1 | Gemini Flash | ~$0.001 | Tool summarization |
+| 2 | Gemini Flash | ~$0.002 | Light judgment |
+| 3 | Claude Sonnet | ~$0.08 | Deep reasoning |
 
 **Total per round (12 dims + improve):**
 - Tier 1×6 + Tier 2×1: ~$0.01
