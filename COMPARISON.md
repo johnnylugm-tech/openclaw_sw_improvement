@@ -70,6 +70,33 @@
 
 ---
 
+## Category 3: anti-bias v3.1 同步（2026-04-23）
+
+今日同步 source software_self_improvement 的 anti-bias v3.1（Layers 8-12 新增）。
+
+**同步的檔案：**
+
+| 檔案 | 變更 | 說明 |
+|------|------|------|
+| `docs/ANTI_BIAS.md` | 從 source 完整移植 | Layers 8-12 全部到位，含 v3.1 更新說明 |
+| `prompts/evaluate_dimension.md` | 嵌入式引用 | Layer 8 Execution Contract + Layer 9 DA prompt + Layer 10 高分確認 |
+| `scripts/verify.py` | Layer 12 Self-Consistency Gate | `self_consistency_gate()` 功能已實作 |
+| `scripts/issue_tracker.py` | Layer 11 Fix Verification Gate | `mark_fixed()` enforce tool_rerun_path |
+
+**OpenClaw 適配差異：**
+
+| 項目 | Source | OpenClaw | 原因 |
+|------|--------|----------|------|
+| Layer 9 DA provider | "Gemini Flash" | "Secondary LLM call" | OpenClaw 不走 Gemini MCP，抽象化 |
+| CRG access | MCP tools (27 tools) | CLI (`crg_integration.py`) | OpenClaw 無 MCP，改用 direct Python |
+
+**COMPARISON.md 覆蓋狀態：**
+- Category 1（平臺移植差異）：✅ 已記錄 CRG MCP → CLI + LLM 路由替換
+- Category 3（本節）：✅ 新增
+- 缺口：無（所有 v3.1 功能均已同步並適配）
+
+---
+
 *最後更新：2026-04-22 by sub-agent audit*
 
 ---
