@@ -131,7 +131,11 @@ def load_config(config_path):
 
 
 def apply_env_overrides(config):
-    """Apply environment variable overrides."""
+    """Apply environment variable overrides.
+    
+    Note: Only HARNESS_MODEL is needed for single-model OpenClaw architecture.
+    Multi-model routing (tier1/tier2/tier3) is not supported in this repo.
+    """
     routing = config.setdefault("llm_routing", {})
     model_env = os.environ.get("HARNESS_MODEL")
     if model_env:

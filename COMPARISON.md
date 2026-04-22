@@ -71,3 +71,32 @@
 ---
 
 *最後更新：2026-04-22 by sub-agent audit*
+
+---
+
+## 未記錄差異補充（2026-04-23 補充）
+
+
+### D1：IMPROVE_CONFIG 從 llm_router.py 移除
+
+- Source 有 `"improve": {"provider": "claude_native"}`（給 improvement agent 用的 special routing）
+- OpenClaw 版本：llm_router.py 已無此欄位，改由 config 統一指定 MiniMax
+- 理由：OpenClaw 是單一模型架構，無需 special routing 分流
+- 影響：若未來要支援 multi-model，需恢復此 routing 邏輯
+
+### D2：mutation_testing 工具 — 刻意技術分歧
+
+| | software_self_improvement | openclaw_sw_improvement |
+|--|--|--|
+| 選擇 | mutmut（保留） | pytest-gremlins（替換） |
+| 理由 | 4 個月新、60× 少下載、需 Python 3.11+ | SIGXCPU timeout + module collision + 3.73× faster |
+| 狀態 | **穩定** | **穩定** |
+
+這是兩個 repo 的**刻意技術分歧**，未來同步時不應覆蓋。如需重新評估，以效能數據（timeout rate、parallel speed）為準。
+
+### D3：--high 優先順序重排（待確認）
+
+- 原始設計：mutation_testing 是 highest-value dimension，故排在 --high
+- 修復後：mutation_testing 是 CORE 不屬於 extended，--high 改為 property_testing
+- 三種方案（見上文）已列出，最後更新選了方案二（重排 high/medium/low）
+- **狀態：爭議未解決**，建議在 README.md 明確標記篩選層級說明
