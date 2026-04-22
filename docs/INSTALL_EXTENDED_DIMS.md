@@ -1,25 +1,30 @@
 # Installation Guide: Extended Dimensions Tools
 
-This guide covers installing tools required for the 5 extended quality dimensions.
-(Note: mutation_testing and license_compliance are now core dimensions and do not require installation here.)
+This guide covers installing tools required for the 5 **extended** quality dimensions.
+
+> **Note:** `mutation_testing` is a **CORE** dimension (in `config.example.yaml`).
+> It uses `pytest-gremlins`, NOT `mutmut`. Core tools are verified via:
+> `python3 scripts/verify_tools.py`
+>
+> **mutation_testing (core):** `pip install pytest-gremlins`
+> **license_compliance (core):** `pip install scancode-toolkit`
 
 ## Quick Start
 
-Install by priority level:
-
 ```bash
-# HIGH priority (mutation testing - strongest signal)
-pip3 install mutmut
-npm install -g stryker stryker-cli
+# CORE dimension tools (already in config.example.yaml)
+pip install pytest-gremlins    # mutation_testing
+pip install scancode-toolkit   # license_compliance (if extended)
 
-# MEDIUM priority (advanced testing + accessibility)
+# HIGH priority extended (property testing)
 pip3 install hypothesis
-npm install -g fast-check pa11y
-pip3 install atheris  # Requires Python 3.9+
+npm install -g fast-check
 
-# LOW priority (compliance + observability)
-pip3 install scancode
-npm install -g fossa
+# MEDIUM priority extended (fuzzing + accessibility)
+pip3 install atheris  # Requires Python 3.9+
+npm install -g pa11y axe-core
+
+# LOW priority extended (observability + supply chain)
 brew install syft grype cosign
 ```
 
@@ -28,30 +33,21 @@ brew install syft grype cosign
 ### pip3 (Python)
 
 ```bash
-# Mutation Testing
-pip3 install mutmut
-
 # Property Testing  
 pip3 install hypothesis
 
 # Fuzzing
 pip3 install atheris  # Python 3.9+ required
-
-# License Compliance
-pip3 install scancode
 ```
 
 **Verification:**
 ```bash
-pip3 show mutmut hypothesis atheris scancode
+pip3 show hypothesis atheris
 ```
 
 ### npm (JavaScript/Node)
 
 ```bash
-# Mutation Testing
-npm install -g stryker stryker-cli
-
 # Property Testing
 npm install -g fast-check
 
@@ -84,23 +80,22 @@ brew list --versions syft grype cosign
 
 ## By Dimension
 
-### 1. Mutation Testing (HIGH Priority)
+### 1. Mutation Testing (CORE — not extended)
 **Purpose:** Verify test suite quality by injecting code mutations
 
-**Tools:**
-- `mutmut` (Python) - pytest/unittest support
-- `stryker` (JavaScript/Node) - broad language support
+**Tool:** `pytest-gremlins` (pytest plugin, NOT mutmut)
+
+> **Why not mutmut?** mutmut has fork/SIGXCPU issues on macOS and creates `mutants/` directory that causes module name collisions with `src/` layouts.
+> pytest-gremlins uses AST-level mutation switching — no file-based working directory, fast (3.73x faster), active maintenance.
 
 **Install:**
 ```bash
-pip3 install mutmut
-npm install -g stryker stryker-cli
+pip install pytest-gremlins
 ```
 
 **Verify:**
 ```bash
-mutmut --version
-stryker --version
+pytest --help | grep gremlins  # should show --gremlins flag
 ```
 
 ### 2. Property Testing (MEDIUM Priority)
@@ -240,11 +235,13 @@ cosign version
 
 ## Troubleshooting
 
-### mutmut installation fails
+### pytest-gremlins installation fails
 ```bash
-# Ensure pip3 is up to date
-pip3 install --upgrade pip setuptools wheel
-pip3 install mutmut
+# Ensure pip is up to date
+pip install --upgrade pip
+pip install pytest-gremlins
+# Verify
+pytest --co --help | grep gremlins
 ```
 
 ### stryker not found in PATH (npm)

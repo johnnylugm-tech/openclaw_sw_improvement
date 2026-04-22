@@ -214,8 +214,8 @@ harness-quality-framework/
 
 | Tool | Manager | Dimension | Status |
 |------|---------|-----------|--------|
-| mutmut | pip3 | mutation_testing | ❌ |
-| stryker | npm | mutation_testing | ❌ |
+| pytest-gremlins | pip3 | mutation_testing | ✅ |
+| stryker | npm | mutation_testing | ❌ |  # optional JS alternative (not needed)
 | hypothesis | pip3 | property_testing | ❌ |
 | fast-check | npm | property_testing | ❌ |
 | atheris | pip3 | fuzzing | ❌ |

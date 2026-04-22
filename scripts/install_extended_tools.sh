@@ -1,6 +1,15 @@
 #!/bin/bash
 # Install Extended Dimensions Tools
 # Usage: ./scripts/install_extended_tools.sh [--high|--medium|--low|--all]
+#
+# NOTE: mutation_testing is a CORE dimension (not extended).
+# It uses pytest-gremlins (pytest plugin), NOT mutmut.
+# Core tools are verified via: python3 scripts/verify_tools.py
+#
+# This script installs tools for EXTENDED dimensions only:
+#   --high:   property_testing (hypothesis)
+#   --medium: fuzzing (athena/atheris), accessibility (pa11y, axe-core)
+#   --low:    observability (syft, grype), supply_chain_security (cosign)
 
 set -e
 
@@ -33,38 +42,54 @@ check_tool() {
     return 1
 }
 
+log_core_required() {
+    echo; log_info "=== Core: pytest-gremlins for mutation_testing ==="
+    log_info "mutation_testing is a CORE dimension — install via:"
+    log_info "  pip install pytest-gremlins"
+    log_info "Verified via: python3 scripts/verify_tools.py"
+    echo
+}
+
 install_high() {
-    echo; log_info "=== Mutation Testing (HIGH) ==="
-    log_info "Installing mutmut...";   pip3 install mutmut  2>/dev/null || log_error "mutmut failed"
-    log_info "Installing stryker...";  npm install -g stryker stryker-cli 2>/dev/null || log_error "stryker failed"
-    check_tool "mutmut"  "pip3" || log_error "mutmut verification failed"
-    check_tool "stryker" "npm"  || log_error "stryker verification failed"
+    # Property testing (hypothesis is Python-only, fast-check is JS)
+    echo; log_info "=== Property Testing (HIGH) ==="
+    log_info "Installing hypothesis...";  pip3 install hypothesis  2>/dev/null || log_error "hypothesis failed"
+    log_info "Installing fast-check..."; npm install -g fast-check 2>/dev/null || log_warn "fast-check failed (optional)"
+    check_tool "hypothesis" "pip3" || log_error "hypothesis verification failed"
 }
 
 install_medium() {
-    echo; log_info "=== Property Testing, Fuzzing, Accessibility (MEDIUM) ==="
-    log_info "Installing hypothesis...";  pip3 install hypothesis  2>/dev/null || log_error "hypothesis failed"
-    log_info "Installing fast-check..."; npm install -g fast-check 2>/dev/null || log_error "fast-check failed"
-    log_info "Installing pa11y...";     npm install -g pa11y axe-core 2>/dev/null || log_error "pa11y failed"
-    check_tool "hypothesis" "pip3" || log_error "hypothesis verification failed"
-    check_tool "fast-check" "npm"  || log_error "fast-check verification failed"
-    check_tool "pa11y"     "npm"  || log_error "pa11y verification failed"
+    # Fuzzing + Accessibility
+    echo; log_info "=== Fuzzing + Accessibility (MEDIUM) ==="
+    log_info "Installing atheris (fuzzing)..."; pip3 install atheris 2>/dev/null || log_warn "atheris failed (Python 3.9+ required)"
+    log_info "Installing pa11y..."; npm install -g pa11y 2>/dev/null || log_warn "pa11y failed (optional)"
+    log_info "Installing axe-core..."; npm install -g axe-core 2>/dev/null || log_warn "axe-core failed (optional)"
+    check_tool "atheris" "pip3" || log_warn "atheris not installed (optional)"
 }
 
 install_low() {
-    echo; log_info "=== License, Observability, Supply Chain (LOW) ==="
-    log_info "Installing scancode..."; pip3 install scancode-toolkit 2>/dev/null || log_error "scancode failed"
-    check_tool "scancode" "pip3" || log_error "scancode verification failed"
+    # Observability + Supply Chain
+    echo; log_info "=== Observability + Supply Chain (LOW) ==="
+    log_info "Installing syft...";  brew install syft 2>/dev/null || log_warn "syft failed (optional)"
+    log_info "Installing grype..."; brew install grype 2>/dev/null || log_warn "grype failed (optional)"
+    log_info "Installing cosign..."; brew install cosign 2>/dev/null || log_warn "cosign failed (optional)"
+    check_tool "syft"   "brew" || log_warn "syft not installed (optional)"
+    check_tool "grype"  "brew" || log_warn "grype not installed (optional)"
+    check_tool "cosign" "brew" || log_warn "cosign not installed (optional)"
 }
 
 verify_all() {
     echo; log_info "=== Verification ==="
-    echo "pip3:  mutmut hypothesis scancode"
-    for t in mutmut hypothesis scancode; do check_tool "$t" "pip3" || log_error "$t not installed"; done
-    echo "npm:   stryker fast-check pa11y"
-    for t in stryker fast-check pa11y; do check_tool "$t" "npm" || log_error "$t not installed"; done
-    echo "brew:  syft grype (optional, macOS)"
-    for t in syft grype; do check_tool "$t" "brew" || log_warn "$t not installed (optional)"; done
+    echo "pip3:  hypothesis"
+    check_tool "hypothesis" "pip3" || log_warn "hypothesis not installed"
+    echo "npm:   fast-check pa11y axe-core"
+    for t in fast-check pa11y axe-core; do
+        check_tool "$t" "npm" || log_warn "$t not installed (optional)"
+    done
+    echo "brew:  syft grype cosign"
+    for t in syft grype cosign; do
+        check_tool "$t" "brew" || log_warn "$t not installed (optional)"
+    done
 }
 
 PRIORITY="${1:-all}"
@@ -77,4 +102,7 @@ case $PRIORITY in
 esac
 
 verify_all
+log_core_required
 echo; log_ok "Done. Enable extended dims in config.advanced.yaml."
+echo "NOTE: Core tools (pytest-gremlins, pyright, pylint, etc.) are verified via:"
+echo "  python3 scripts/verify_tools.py"

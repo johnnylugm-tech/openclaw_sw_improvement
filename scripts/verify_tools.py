@@ -18,27 +18,31 @@ import shutil
 import sys
 import json
 
-# Tools required per dimension (matches dimension_executor.py)
+# Tools required per dimension (matches evaluate_dimension.md)
+# Note: type_safety uses pyright, mutation_testing uses pytest-gremlins (pytest plugin)
 REQUIRED_TOOLS = {
-    "linting":            {"cmd": "pylint",    "package": "pylint",                "install": "pip install pylint"},
-    "type_safety":        {"cmd": "mypy",      "package": "mypy",                  "install": "pip install mypy"},
-    "test_coverage":      {"cmd": "pytest",    "package": "pytest pytest-cov",     "install": "pip install pytest pytest-cov"},
-    "security":           {"cmd": "bandit",    "package": "bandit",                "install": "pip install bandit"},
-    "readability":        {"cmd": "radon",     "package": "radon",                 "install": "pip install radon"},
-    "secrets_scanning":   {"cmd": "gitleaks",  "package": "gitleaks",              "install": "brew install gitleaks"},
-    "license_compliance": {"cmd": "scancode",  "package": "scancode-toolkit",     "install": "pip install scancode-toolkit"},
+    "linting":            {"cmd": "pylint",         "package": "pylint",                      "install": "pip install pylint"},
+    "type_safety":        {"cmd": "pyright",         "package": "pyright",                     "install": "pip install pyright"},
+    "test_coverage":      {"cmd": "pytest",           "package": "pytest pytest-cov",           "install": "pip install pytest pytest-cov"},
+    "security":           {"cmd": "bandit",           "package": "bandit",                      "install": "pip install bandit"},
+    "readability":        {"cmd": "radon",            "package": "radon",                       "install": "pip install radon"},
+    "secrets_scanning":   {"cmd": "gitleaks",         "package": "gitleaks",                    "install": "brew install gitleaks"},
+    "license_compliance": {"cmd": "scancode",         "package": "scancode-toolkit",            "install": "pip install scancode-toolkit"},
+    "mutation_testing":   {"cmd": "__pytest_gremlins__", "package": "pytest-gremlins", "install": "pip install pytest-gremlins"},
 }
 
 ALL_TOOLS = {
-    "python":   {"cmd": "python3",    "package": None,                          "install": None},
-    "git":     {"cmd": "git",       "package": None,                          "install": None},
-    "pylint":  {"cmd": "pylint",    "package": "pylint",                      "install": "pip install pylint"},
-    "mypy":    {"cmd": "mypy",      "package": "mypy",                        "install": "pip install mypy"},
-    "pytest":  {"cmd": "pytest",    "package": "pytest pytest-cov",           "install": "pip install pytest pytest-cov"},
-    "bandit":  {"cmd": "bandit",    "package": "bandit",                      "install": "pip install bandit"},
-    "radon":   {"cmd": "radon",     "package": "radon",                       "install": "pip install radon"},
-    "gitleaks":{"cmd": "gitleaks",  "package": "gitleaks",                    "install": "brew install gitleaks"},
-    "scancode":{"cmd": "scancode",  "package": "scancode-toolkit",            "install": "pip install scancode-toolkit"},
+    "python":    {"cmd": "python3",        "package": None,                               "install": None},
+    "git":      {"cmd": "git",            "package": None,                               "install": None},
+    "pylint":   {"cmd": "pylint",         "package": "pylint",                           "install": "pip install pylint"},
+    "pyright":  {"cmd": "pyright",         "package": "pyright",                          "install": "pip install pyright"},
+    "mypy":     {"cmd": "mypy",            "package": "mypy",                             "install": "pip install mypy"},
+    "pytest":   {"cmd": "pytest",           "package": "pytest pytest-cov",                "install": "pip install pytest pytest-cov"},
+    "pytest_gremlins": {"cmd": "__pytest_gremlins__", "package": "pytest-gremlins", "install": "pip install pytest-gremlins"},
+    "bandit":   {"cmd": "bandit",           "package": "bandit",                          "install": "pip install bandit"},
+    "radon":    {"cmd": "radon",            "package": "radon",                            "install": "pip install radon"},
+    "gitleaks": {"cmd": "gitleaks",         "package": "gitleaks",                        "install": "brew install gitleaks"},
+    "scancode": {"cmd": "scancode",         "package": "scancode-toolkit",                 "install": "pip install scancode-toolkit"},
 }
 
 
@@ -46,7 +50,18 @@ def check_tool(tool_key: str) -> dict:
     """Check if a single tool is available."""
     info = ALL_TOOLS.get(tool_key, {})
     cmd = info.get("cmd", tool_key)
-    available = shutil.which(cmd) is not None
+
+    # pytest-gremlins is a pytest plugin, check via python import
+    if cmd == "__pytest_gremlins__":
+        try:
+            import importlib.util
+            spec = importlib.util.find_spec("pytest_gremlins")
+            available = spec is not None
+        except Exception:
+            available = False
+    else:
+        available = shutil.which(cmd) is not None
+
     return {
         "tool": tool_key,
         "cmd": cmd,
@@ -59,13 +74,6 @@ def check_tool(tool_key: str) -> dict:
 def check_all() -> dict:
     """Check all tools and return results."""
     results = {key: check_tool(key) for key in ALL_TOOLS}
-    required_available = all(
-        results[dim_info["cmd"]]["available"]
-        for dim_info in REQUIRED_TOOLS.values()
-        for key, info in ALL_TOOLS.items()
-        if info.get("cmd") == dim_info["cmd"]
-    )
-    # Simpler: check all required tools directly
     required_results = {dim: check_tool(info["cmd"]) for dim, info in REQUIRED_TOOLS.items()}
     all_available = all(r["available"] for r in required_results.values())
     return {
@@ -96,10 +104,10 @@ def main():
     if arg == "--list":
         print("Required tools per dimension:")
         for dim, info in REQUIRED_TOOLS.items():
-            status = "✓" if shutil.which(info["cmd"]) else "✗"
+            status = "✓" if check_tool(info["cmd"])["available"] else "✗"
             print(f"  {status} {dim}: {info['cmd']}")
         print("\nOptional tools:")
-        for key in ["python", "git"]:
+        for key in ["python", "git", "mypy"]:
             status = "✓" if shutil.which(ALL_TOOLS[key]["cmd"]) else "✗"
             print(f"  {status} {key}: {ALL_TOOLS[key]['cmd']}")
         return
@@ -118,7 +126,7 @@ def main():
     if arg in ALL_TOOLS:
         r = check_tool(arg)
         if r["available"]:
-            print(f"✓ {arg} found at {shutil.which(r['cmd'])}")
+            print(f"✓ {arg} found")
             sys.exit(0)
         else:
             install = r["install"] or "(no install command)"

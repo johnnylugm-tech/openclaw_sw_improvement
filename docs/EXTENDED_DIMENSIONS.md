@@ -43,9 +43,12 @@ def validate_email(email):
 
 ### Tools
 
-- **pytest-gremlins** (Python) — pytest-native, subprocess executor, Python 3.14+ compatible
-- **mutmut** (Python) — pytest-compatible, but has Python 3.14 compatibility issues with async tests
-- **stryker** (JavaScript/TypeScript) — jest/mocha compatible
+> **Note:** `mutation_testing` is a **CORE** dimension in `config.example.yaml` (not extended).
+> It uses `pytest-gremlins` — see `evaluate_dimension.md` for the actual command.
+
+- **pytest-gremlins** (Python) — pytest-native, AST-level mutation switching, fast (3.73x vs mutmut), active 2026
+- **mutmut** (Python) — ⚠️ DEPRECATED: fork/SIGXCPU issues on macOS, module name collision with `src/` layouts
+- **stryker** (JavaScript/TypeScript) — optional JS alternative
 
 ### Prerequisites
 

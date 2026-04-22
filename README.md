@@ -54,7 +54,7 @@ The Agent will execute the 4-step process from `SKILL.md` — no further command
 
 ```bash
 # First time only: install extended tools
-./scripts/install_extended_tools.sh --high   # mutation testing (recommended)
+./scripts/install_extended_tools.sh --high   # property testing (recommended)
 ./scripts/install_extended_tools.sh --medium # property testing + fuzzing
 ./scripts/install_extended_tools.sh --all    # everything
 
@@ -113,7 +113,7 @@ license_compliance  6%
 | **error_handling** | 9% | 85 | pytest, jest | Exception/error recovery |
 | **documentation** | 10% | 85 | pydocstyle, jsdoc | Code comment coverage |
 | **secrets_scanning** | 8% | 100 | detect-secrets, gitleaks | Secret/credential leaks (zero tolerance) |
-| **mutation_testing** | 8% | 70 | mutmut, stryker | Test suite quality validation |
+| **mutation_testing** | 8% | 70 | pytest-gremlins | Test suite quality validation |
 | **license_compliance** | 6% | 95 | scancode, fossa | License conflict detection |
 
 ## Extended Dimensions (5)
