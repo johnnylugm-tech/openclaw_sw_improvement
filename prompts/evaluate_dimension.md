@@ -179,8 +179,8 @@ If `available: false` → skip CRG; fall back to full code reading (higher token
 **If `available: true` → first call is always `get_minimal_context` (~100 tokens):**
 
 ```
-[USE mcp__code-review-graph__get_minimal_context_tool]
-task: "evaluate <dimension> dimension"
+# CRG query (OpenClaw — no MCP, use CLI instead)
+python3 scripts/crg_integration.py minimal . "evaluate <dimension>"
 ```
 
 Read `risk_score` and `suggested_next_tools` - use them to focus the dimension
@@ -239,16 +239,29 @@ fan_in <  8   → medium (untested) / low (tested)
 Score-file severities MUST use these buckets - no free-hand severity calls
 for hub-related findings.
 
-Then, per dimension, use the corresponding **CRG MCP tools** (available once
-`.mcp.json` is loaded - the `code-review-graph` server exposes 27 tools):
+### CRG tools in OpenClaw（CLI mode, no MCP）
 
-| Dimension | CRG MCP tools to call | What to ask |
-|-----------|----------------------|-------------|
-| `architecture` | `get_hub_nodes` (top 10), `get_bridge_nodes`, `get_knowledge_gaps`, `get_surprising_connections`, `get_architecture_overview`, `list_communities`, `get_community` (low-cohesion ones) | Layering violations, chokepoints, cyclic deps, hub nodes doing too much, low-cohesion modules |
-| `readability` | `find_large_functions`, `get_hub_nodes` | Functions > 100 LOC; hub nodes that have become god-objects |
-| `performance` | `get_hub_nodes`, `list_flows`, `get_flow` (for top flows) | Hot paths through bottleneck functions; call depth of critical flows |
-| `error_handling` | `get_affected_flows`, `semantic_search_nodes "except\|catch\|error"`, `list_flows`, `get_flow` (drill into specific flows) | Flows without error handlers; trace exact call step missing try/except |
-| `documentation` | `generate_wiki` (first run) or `get_wiki_page`, `get_hub_nodes`, `get_docs_section` (targeted) | Undocumented hub nodes = highest-priority doc gaps |
+The CRG provides structured context via `crg_integration.py` CLI:
+```bash
+# Get minimal context (~100 tokens, always call first)
+python3 scripts/crg_integration.py minimal . "evaluate <dimension>"
+
+# Get metrics for architecture / error_handling sub-scoring
+cat .sessi-work/crg_metrics.json
+
+# Get hotspots pre-identified by CRG
+cat .sessi-work/crg_reconnaissance.json
+```
+
+For deep analysis, use `crg_analysis.py` directly:
+```bash
+python3 scripts/crg_analysis.py hub_nodes --limit 10
+python3 scripts/crg_analysis.py flows --top 5
+```
+
+If CRG is not available (crg_status.json shows `available: false`), skip CRG
+and fall back to full code reading with higher token cost.
+```
 
 **Token-efficient evaluation protocol:**
 
@@ -434,16 +447,14 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 
 ---
 
-## Token Cost Reference
+### Token Budget
 
-| Tier | Provider | Typical cost/dim | Use case |
-|------|----------|-----------------|---------|
-| 1 | Gemini Flash | ~$0.001 | Tool summarization |
-| 2 | Gemini Flash | ~$0.002 | Light judgment |
-| 3 | Claude Sonnet | ~$0.08 | Deep reasoning |
+OpenClaw uses MiniMax-M2.7 as the primary LLM. Token budgets are enforced
+by the router prompt template:
 
-**Total per round (12 dims + improve):**
-- Tier 1×6 + Tier 2×1: ~$0.01
-- Tier 3×5: ~$0.40
-- Improve step: ~$0.45
-- **Total: ~$0.86/round** (vs ~$3.00 all-Claude)
+- **Input:** ≤ 20,000 tokens (config: llm_routing.token_budget.input_max)
+- **Output:** ≤ 4,000 tokens (config: llm_routing.token_budget.output_max)
+
+For cost estimates, consult your OpenClaw / MiniMax billing dashboard.
+Do not use the source repo's tier-based cost table — it reflects Claude + Gemini Flash pricing,
+not MiniMax-M2.7.
