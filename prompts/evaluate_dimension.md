@@ -176,7 +176,7 @@ cat .sessi-work/crg_status.json
 
 If `available: false` → skip CRG; fall back to full code reading (higher token cost).
 
-**If `available: true` → first call is always `get_minimal_context` (~100 tokens):**
+**If `available: true` → first call is always `crg_integration.py minimal` (~100 tokens):**
 
 ```
 # CRG query (OpenClaw — no MCP, use CLI instead)
@@ -265,7 +265,7 @@ and fall back to full code reading with higher token cost.
 
 **Token-efficient evaluation protocol:**
 
-1. **CRG context (cheap)** - call the MCP tools above; they return structured JSON
+1. **CRG context (cheap)** - call the CRG CLI above; it returns structured JSON
    in ~500-2000 tokens total instead of reading 10,000+ lines of code
 2. **Tool score** - What do the tools report? Extract numeric signal (0-100).
 3. **LLM score** - Your assessment using CRG structural data + spot-reads of
@@ -275,7 +275,7 @@ and fall back to full code reading with higher token cost.
 6. **Gaps** - Cross-reference CRG knowledge_gaps with tool findings
 
 **Token discipline for Tier 3:**
-- Call `get_minimal_context` first (always) - orients analysis in ~100 tokens
+- Call `crg_integration.py minimal` first (always) - orients analysis in ~100 tokens
 - Read `crg_reconnaissance.json` for pre-identified hotspots in this dimension
 - Read CRG tool output second; code third (only for files CRG flagged)
 - Spot-read 2-5 specific functions CRG identified as problematic
@@ -284,9 +284,9 @@ and fall back to full code reading with higher token cost.
 - Target: -30 to -50% token reduction vs pure-code-reading approach
 
 **Additional targeted tools (call as needed):**
-- `query_graph_tool(pattern="tests_for", target="<hub_node>")` - verify hub nodes have explicit tests
-- `traverse_graph_tool(query="<function>", mode="bfs", depth=2)` - fan-in/fan-out for a specific node
-- `query_graph_tool(pattern="callers_of", target="<function>")` - who calls this function
+- `python3 scripts/crg_analysis.py query tests_for <hub_node>` - verify hub nodes have explicit tests
+- `python3 scripts/crg_analysis.py traverse <function> --depth 2` - fan-in/fan-out for a specific node
+- `python3 scripts/crg_analysis.py query callers_of <function>` - who calls this function
 
 **Graceful degradation:** If CRG is not installed or graph is empty, the
 evaluation still works - just with higher token cost. The framework must
@@ -375,7 +375,7 @@ Save to `.sessi-work/round_<n>/scores/<dimension>.json`:
   "dimension": "<name>",
   "round": <n>,
   "llm_tier": <1|2|3>,
-  "llm_provider": "gemini|claude_native",
+  "llm_provider": "gemini|minimax|claude_native",
   "tool_score": <0-100>,
   "llm_score": <0-100>,
   "score": <min(tool_score, llm_score)>,
@@ -443,7 +443,7 @@ The `open_critical` / `open_high` / `open_medium` counts feed directly into
 2. Every finding needs `evidence` field - no bare assertions
 3. If tool gives no output (tool missing/error) → `tool_score = null`, use `llm_score` only, flag in score file
 4. Δ > 10 from previous round requires tool evidence or ≥ 3 lines of git diff
-5. Tier 1/2 evaluations: trust the tool output - Gemini's role is only to parse and structure it
+5. Tier 1/2 evaluations: trust the tool output - the LLM's role is only to parse and structure it
 
 ---
 
