@@ -1,54 +1,195 @@
+# Harness Quality Framework - Standard Configuration
+# 12 core dimensions, all enabled by default
+# Perfect for: Production software, web apps, libraries
+
 version: "1.0"
 
+# Global settings
 quality:
-  score_gate: 85          # Minimum overall score to pass
+  score_gate: 85          # Minimum overall score (0-100) — NOT a completion target
   max_rounds: 3           # Maximum improvement rounds
-  early_stop: true        # Stop when quality_complete=true
-  saturation_rounds: 3    # Stop after N rounds with no new issues
-  commit_per_fix: true    # One commit per fix (traceability)
+  early_stop: true        # Issue-driven: stop only when score_gate met AND no open critical/high
+  saturation_rounds: 3    # Stop if no NEW issues found for N consecutive rounds (plateau)
+  commit_per_fix: true    # One commit per improvement
+  # `target` (legacy) still accepted as alias for score_gate.
+  # Completion requires BOTH: overall_score >= score_gate AND zero open critical/high issues.
 
+# Working environment
 workspace:
-  work_dir: ".sessi-work"
-  preserve_git: true      # Don't re-init existing git repos
+  work_dir: ".sessi-work"  # Where to store evaluation artifacts
+  preserve_git: true       # Keep git history for traceability
 
+# Core dimensions (12 standard quality dimensions)
+# Weights sum to 1.00; auto-normalized by config_loader.py
 dimensions:
-  linting:           {enabled: true,  weight: 0.06, target: 95}
-  type_safety:        {enabled: true,  weight: 0.10, target: 95}
-  test_coverage:      {enabled: true,  weight: 0.13, target: 80}
-  security:          {enabled: true,  weight: 0.10, target: 90}
-  performance:        {enabled: true,  weight: 0.07, target: 80}
-  architecture:      {enabled: true,  weight: 0.07, target: 80}
-  readability:        {enabled: true,  weight: 0.06, target: 85}
-  error_handling:    {enabled: true,  weight: 0.09, target: 85}
-  documentation:     {enabled: true,  weight: 0.10, target: 85}
-  secrets_scanning:   {enabled: true,  weight: 0.08, target: 100}
-  mutation_testing:  {enabled: true,  weight: 0.08, target: 70, time_budget_seconds: 300}
-  license_compliance: {enabled: true, weight: 0.06, target: 95}
 
-  # Extended dimensions (disabled by default)
-  property_testing:   {enabled: false, weight: 0.07, target: 75}
-  fuzzing:            {enabled: false, weight: 0.08, target: 70}
-  accessibility:      {enabled: false, weight: 0.06, target: 85}
-  observability:      {enabled: false, weight: 0.05, target: 80}
-  supply_chain_security: {enabled: false, weight: 0.06, target: 80}
+  linting:
+    enabled: true
+    weight: 0.06
+    target: 95
+    tools:
+      - eslint              # JavaScript
+      - pylint              # Python
+      - clippy              # Rust
+      - golangci-lint       # Go
 
+  type_safety:
+    enabled: true
+    weight: 0.10
+    target: 95
+    tools:
+      - pyright             # Python
+      - eslint              # JavaScript (with @typescript-eslint)
+      - rustc               # Rust
+      - javac               # Java
+
+  test_coverage:
+    enabled: true
+    weight: 0.13
+    target: 80
+    tools:
+      - coverage            # Python
+      - nyc                 # JavaScript
+      - tarpaulin           # Rust
+      - jacoco              # Java
+
+  security:
+    enabled: true
+    weight: 0.10
+    target: 90
+    tools:
+      - bandit              # Python (code patterns: SQLi, XSS, eval)
+      - npm-audit           # JavaScript dependencies
+      - cargo-audit         # Rust dependencies
+      - git-secrets         # Commit-time secret prevention
+
+  performance:
+    enabled: true
+    weight: 0.07
+    target: 80
+    tools:
+      - pytest-benchmark    # Python
+      - lighthouse          # Web (Chromium)
+      - cargo-criterion     # Rust
+      - jmh                 # Java
+
+  architecture:
+    enabled: true
+    weight: 0.07
+    target: 80
+    tools:
+      - sonarqube           # Multi-language
+      - codeql              # Security analysis
+      - architecture-tests  # Custom
+
+  readability:
+    enabled: true
+    weight: 0.06
+    target: 85
+    tools:
+      - radon               # Python cyclomatic complexity
+      - eslint-plugin-sonarjs  # JavaScript
+      - clippy              # Rust
+
+  error_handling:
+    enabled: true
+    weight: 0.09
+    target: 85
+    tools:
+      - custom-checks       # Error recovery tests
+      - pytest              # Python
+      - jest                # JavaScript
+
+  documentation:
+    enabled: true
+    weight: 0.10
+    target: 85
+    tools:
+      - pydocstyle          # Python
+      - jsdoc               # JavaScript
+      - rustdoc             # Rust
+      - javadoc             # Java
+
+  secrets_scanning:
+    enabled: true
+    weight: 0.08
+    target: 100             # Zero tolerance: any secret leak = failure
+    tools:
+      - detect-secrets      # pip3: inline scan + baseline management (700+ secret types)
+      - gitleaks            # brew: full git history deep scan + entropy analysis
+    # Distinct from 'security' (code patterns: SQLi, XSS, eval, dependency CVEs)
+    # Covers: API keys, tokens, private keys, connection strings, cloud credentials
+
+  mutation_testing:
+    enabled: true
+    weight: 0.08
+    target: 70              # 70% mutation kill rate
+    time_budget_seconds: 300  # 5-min cap per round to control runtime on large suites
+    tools:
+      - mutmut              # pip3: Python
+      - stryker             # npm: JavaScript/TypeScript (@stryker-mutator/core)
+    # PREREQUISITE AUTO-MET: test_coverage target 80% → mutations are meaningful
+    # Validates test QUALITY: line coverage alone ≠ assertion strength
+
+  license_compliance:
+    enabled: true
+    weight: 0.06
+    target: 95              # Allow minor exceptions (transitive dep edge cases)
+    tools:
+      - scancode-toolkit    # pip3: 700+ license type detection
+      - fossa               # npm: dependency license tracking
+    # Applies to ALL projects with dependencies (legal risk is universal)
+    # Fast runner: 1-2 min per round, no prerequisites
+
+# Score calculation
 scoring:
-  reconcile_method: "min"           # tool_first: min(tool, llm)
-  evidence_threshold: 10            # Δ > 10 requires evidence
-  tool_diff_min_lines: 3            # Min git diff lines for evidence
-  cap_unsupported_delta: 3          # Max gain without evidence
+  reconcile_method: "min"   # final_score = min(tool_score, llm_score)
+  evidence_threshold: 10    # Points requiring diff/tool evidence
+  tool_diff_min_lines: 3    # Min changed lines for diff evidence
+  cap_unsupported_delta: 3  # Max Δ without evidence
   regression_detection: true
   revert_on_regression: true
 
+# Evaluation protocol
 evaluation:
-  tool_first: true
-  evidence_required: true
+  tool_first: true          # Prioritize tool outputs over LLM assessment
+  evidence_required: true   # All findings must have evidence
   per_dimension_depth: "thorough"
   explain_gaps: true
 
+# LLM Routing — reduces Claude token cost by ~77%
+# Tier 1/2 → Gemini Flash (tool summarization, ~$0.001-0.002/dim)
+# Tier 3   → Claude native (deep reasoning, ~$0.08/dim)
+# Improve  → Claude native always (code generation, non-negotiable)
+#
+# Model options:
+#   Gemini: gemini-2.5-flash (default, fast+cheap) | gemini-2.5-pro (higher accuracy)
+#   Claude: claude-sonnet-4-5 (default) | claude-sonnet-4-6 (latest) | claude-opus-4 (highest capability)
+#
+# Override at runtime via env vars (no config edit needed):
+#   HARNESS_GEMINI_MODEL=gemini-2.5-pro   python3 scripts/config_loader.py config.yaml
+#   HARNESS_CLAUDE_MODEL=claude-opus-4    python3 scripts/config_loader.py config.yaml
+#   HARNESS_IMPROVE_MODEL=claude-opus-4   python3 scripts/config_loader.py config.yaml
 llm_routing:
   enabled: true
-  model: "minimax/MiniMax-M2.7"    # Unified model for all dimensions
+  tier1:
+    provider: gemini
+    model: gemini-2.5-flash       # override: HARNESS_GEMINI_MODEL
+    dimensions: [linting, type_safety, test_coverage,
+                 secrets_scanning, license_compliance, mutation_testing]
+  tier2:
+    provider: gemini
+    model: gemini-2.5-flash       # override: HARNESS_GEMINI_MODEL
+    dimensions: [security]
+  tier3:
+    provider: claude_native
+    model: claude-sonnet-4-5      # override: HARNESS_CLAUDE_MODEL
+    dimensions: [architecture, readability, error_handling,
+                 documentation, performance]
+  improve:
+    provider: claude_native
+    model: claude-sonnet-4-5      # override: HARNESS_IMPROVE_MODEL (or HARNESS_CLAUDE_MODEL)
   token_budget:
-    input_max: 20000
-    output_max: 4000
+    tier1_input_max: 8000
+    tier2_input_max: 10000
+    tier3_input_max: 20000
