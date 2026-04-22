@@ -39,7 +39,7 @@ optional: skip it if your codebase is not Java/JVM-based.
 | test_coverage | 1 | ✓ core | coverage, nyc |
 | security | 2 | ✓ core | bandit, npm-audit |
 | secrets_scanning | 1 | ✓ core | detect-secrets, gitleaks |
-| mutation_testing | 1 | ✓ core | mutmut, @stryker-mutator/core |
+| mutation_testing | 1 | ✓ core | pytest-gremlins, mutmut (deprecated — has fork/SIGXCPU issues on macOS) |
 | license_compliance | 1 | ✓ core | scancode-toolkit, fossa |
 | architecture | 3 | ✓ core | radon, sonarqube |
 | readability | 3 | ✓ core | radon |

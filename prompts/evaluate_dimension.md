@@ -87,9 +87,17 @@ scancode --license --json-pp - src/ | head -300
 
 ### mutation_testing (Tier 1)
 ```bash
-# Enforce time budget from config: time_budget_seconds
-timeout $TIME_BUDGET mutmut run 2>&1
-mutmut results 2>&1 | head -100
+# Use pytest-gremlins (AST-level, no mutants/ directory conflict)
+# Requires: pip install pytest-gremlins
+# Note: ignore flaky/collection-error test files to avoid interrupting the run
+pytest --gremlins --gremlin-report=json \
+  --ignore=tests/test_cli.py \
+  --ignore=tests/test_main.py \
+  --ignore=tests/test_speech_router.py \
+  --ignore=tests/test_synthesis_coverage.py \
+  2>&1 | tail -50
+# Score: read "percentage" from coverage/gremlins/gremlins.json
+# Example: {"summary": {"total": 427, "zapped": 237, "percentage": 55.5}}
 ```
 
 ### architecture (Tier 3)

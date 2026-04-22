@@ -14,3 +14,6 @@ __pycache__/
 
 # Reports
 .sessi-work/
+.coverage.*
+.scancode_license.json
+coverage/
