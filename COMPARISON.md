@@ -97,7 +97,7 @@
 
 ---
 
-*最後更新：2026-04-22 by sub-agent audit*
+*最後更新：2026-04-23 by sub-agent audit*
 
 ---
 
