@@ -18,7 +18,7 @@ from typing import Optional
 DIMENSIONS = {
     "linting": {
         "tool": "pylint",
-        "command": ["pylint", "{target}/src", "--output-format=json", "--disable=import-error"],
+        "command": ["pylint", "{target}/scripts", "--output-format=json", "--disable=import-error"],
         "score_type": "pylint_json",
         "weight": 0.06,
     },
@@ -30,13 +30,13 @@ DIMENSIONS = {
     },
     "test_coverage": {
         "tool": "pytest",
-        "command": ["pytest", "--cov", "--cov-report=term", "-q"],
+        "command": ["pytest", "{target}/scripts", "--cov", "--cov-report=term", "-q"],
         "score_type": "coverage_term",
         "weight": 0.13,
     },
     "security": {
         "tool": "bandit",
-        "command": ["bandit", "-r", "-f", "json", "-x", "**/mutants/**", "{target}/src"],
+        "command": ["bandit", "-r", "-f", "json", "-x", "**/mutants/**", "{target}/scripts"],
         "score_type": "bandit_json",
         "weight": 0.10,
     },
@@ -72,19 +72,19 @@ DIMENSIONS = {
     },
     "secrets_scanning": {
         "tool": "gitleaks",
-        "command": ["gitleaks", "detect", "--report=json"],
+        "command": ["gitleaks", "detect", "-s", "{target}", "-f", "json", "-r", "-"],
         "score_type": "gitleaks_json",
         "weight": 0.08,
     },
     "mutation_testing": {
         "tool": "pytest",
-        "command": ["pytest", "{target}", "--gremlins", "--gremlin-executor=subprocess", "--gremlin-report=json", "-q"],
+        "command": ["pytest", "{target}/scripts", "--gremlins", "--gremlin-executor=subprocess", "--gremlin-report=json", "-q", "--ignore=scripts/__pycache__"],
         "score_type": "gremlins_json",
         "weight": 0.08,
     },
     "license_compliance": {
         "tool": "scancode",
-        "command": ["scancode", "--output=json", "{target}"],
+        "command": ["/Users/johnny/Library/Python/3.9/bin/scancode", "--license", "--json-pp", "{target}/.scancode_license.json", "{target}/scripts"],
         "score_type": "scancode_json",
         "weight": 0.06,
     },
@@ -234,6 +234,34 @@ def _parse_gitleaks_json(stdout: str) -> dict:
                 "severity": "critical",
             })
     except json.JSONDecodeError:
+        pass
+    return findings
+
+
+def _parse_scancode_json_from_file(stdout: str, target: str) -> dict:
+    """Parse scancode JSON output from file.
+
+    scancode writes to a file (--json-pp OUTPUT_FILE INPUT) instead of stdout.
+    File path is {target}/.scancode_license.json.
+    """
+    findings = []
+    json_path = Path(target) / ".scancode_license.json"
+    if not json_path.exists():
+        return findings
+    try:
+        data = json.loads(json_path.read_text())
+        files = data.get("files", []) if isinstance(data, dict) else []
+        for f in files:
+            license_exprs = f.get("license_expressions", [])
+            if license_exprs:
+                for lic in license_exprs:
+                    findings.append({
+                        "file": f.get("path", "unknown"),
+                        "line": 0,
+                        "message": f"License: {lic.get('key', 'unknown')}",
+                        "severity": "info",
+                    })
+    except (json.JSONDecodeError, OSError):
         pass
     return findings
 
@@ -473,6 +501,19 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
             "status": "skip",
         }
 
+    # Pre-check for mutation_testing: skip if no test files found (prevents pytest-gremlins hang)
+    if dimension == "mutation_testing":
+        test_files = list(Path(f"{target}/scripts").glob("test_*.py")) + \
+                     list(Path(f"{target}/scripts").glob("*_test.py"))
+        if not test_files:
+            return {
+                "dimension": dimension,
+                "tool_score": 100,
+                "raw_output": "skipped: no test files found in scripts/",
+                "findings": [],
+                "status": "skip",
+            }
+
     rc, stdout, stderr = _run_command(command, target)
 
     if rc == -1 and "TOOL_NOT_FOUND" in stderr:
@@ -511,6 +552,8 @@ def _exec_dimension(dimension: str, target: str, config: dict) -> dict:
         findings = _parse_gitleaks_json(stdout)
     elif config.get(dimension, {}).get("score_type") == "gremlins_json":
         findings = _parse_gremlins_json(stdout)
+    elif config.get(dimension, {}).get("score_type") == "scancode_json":
+        findings = _parse_scancode_json_from_file(stdout, target)
     elif config.get(dimension, {}).get("score_type") == "cloc_json":
         findings = _parse_cloc_json(stdout)
     else:
