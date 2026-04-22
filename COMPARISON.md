@@ -100,3 +100,10 @@
 - 修復後：mutation_testing 是 CORE 不屬於 extended，--high 改為 property_testing
 - 三種方案（見上文）已列出，最後更新選了方案二（重排 high/medium/low）
 - **狀態：爭議未解決**，建議在 README.md 明確標記篩選層級說明
+
+### D4：Devil's Advocate 段落重寫
+
+- Source（evaluate_dimension.md）：包含 "Gemini Flash challenges Tier 3" 明確提及
+- OpenClaw 版本：移除 provider 特定文字，改為 "Secondary LLM call challenges Tier 3"
+- 理由：OpenClaw 不走 Gemini MCP，抽象化為通用 LLM 描述
+- COMPARISON.md 記錄：⚠️ 僅間接覆蓋（見 Category 1: 平台移植差異），未明確標記
