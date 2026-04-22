@@ -1,31 +1,80 @@
-#!/opt/homebrew/bin/python3.12
+#!/usr/bin/env python3
 """
-LLM Router: Unified MiniMax M2.7 routing for all dimension evaluations.
+LLM Router: Routes dimension evaluation to appropriate LLM tier
 
-Removes Gemini/Claude tier routing — all evaluations use MiniMax M2.7.
+Tier 1 → Gemini Flash  (tool-output summarization, cheap)
+Tier 2 → Gemini Flash  (light judgment, cheap)
+Tier 3 → MiniMax-M2.7  (deep reasoning, always)
+
+Outputs routing decision JSON for evaluate_dimension.md to consume.
 """
 
 import os
 import sys
 import json
 
-_MINIMAX_MODEL = os.environ.get("HARNESS_MODEL", "minimax/MiniMax-M2.7")
+# ---------------------------------------------------------------------------
+# Env var model overrides
+# ---------------------------------------------------------------------------
+_GEMINI_MODEL = os.environ.get("HARNESS_GEMINI_MODEL", "gemini-2.5-flash")
+_MINIMAX_MODEL = "minimax/MiniMax-M2.7"
 
-ALL_DIMENSIONS = [
-    "linting", "type_safety", "test_coverage", "security", "performance",
-    "architecture", "readability", "error_handling", "documentation",
-    "secrets_scanning", "mutation_testing", "license_compliance",
-    "property_testing", "fuzzing", "accessibility", "observability",
-    "supply_chain_security",
-]
+# Routing table: dimension → tier
+TIER_MAP = {
+    # Tier 1: Tool output is the full story — LLM only summarizes
+    "linting":            1,
+    "type_safety":        1,
+    "test_coverage":      1,
+    "secrets_scanning":   1,
+    "license_compliance": 1,
+    "mutation_testing":   1,
 
-PROMPT_TEMPLATE = """\
+    # Tier 2: Light judgment needed (borderline, Flash still handles well)
+    "security":           2,
+
+    # Tier 3: Deep reasoning, subjective judgment, or code-level analysis
+    "architecture":       3,
+    "readability":        3,
+    "error_handling":     3,
+    "documentation":      3,
+    "performance":        3,
+
+    # Extended dims — classify conservatively
+    "property_testing":       1,
+    "fuzzing":                1,
+    "accessibility":          1,
+    "observability":          1,
+    "supply_chain_security":  1,
+}
+
+TIER_CONFIG = {
+    1: {
+        "model": _GEMINI_MODEL,
+        "provider": "gemini",
+        "rationale": "Tool output is deterministic; LLM role is summarization only",
+        "token_budget": {"input": 8000, "output": 800},
+    },
+    2: {
+        "model": _GEMINI_MODEL,
+        "provider": "gemini",
+        "rationale": "Light judgment; Gemini Flash sufficient for pattern analysis",
+        "token_budget": {"input": 10000, "output": 1200},
+    },
+    3: {
+        "model": _MINIMAX_MODEL,
+        "provider": "minimax",
+        "rationale": "Deep reasoning / subjective judgment / code understanding required",
+        "token_budget": {"input": 20000, "output": 3000},
+    },
+}
+
+GEMINI_PROMPT_TEMPLATE = """\
 You are a code quality evaluator. Analyze the following tool output for the '{dimension}' dimension and return a JSON evaluation.
 
 ## Tool Output
 {tool_output}
 
-## Code Context (if provided)
+## Code Sample (if provided)
 {code_sample}
 
 ## Task
@@ -50,21 +99,30 @@ Return ONLY valid JSON in this exact format:
 
 
 def route(dimension: str) -> dict:
-    """Return routing decision for a dimension (all use MiniMax M2.7)."""
-    return {
+    """Return routing decision for a dimension."""
+    tier = TIER_MAP.get(dimension, 3)  # Default to MiniMax for unknown dims
+    config = TIER_CONFIG[tier]
+    result = {
         "dimension": dimension,
-        "model": _MINIMAX_MODEL,
-        "provider": "minimax",
-        "token_budget": {"input": 20000, "output": 4000},
-        "rationale": "All dimensions use MiniMax M2.7 via OpenClaw",
+        "tier": tier,
+        "model": config["model"],
+        "provider": config["provider"],
+        "rationale": config["rationale"],
+        "token_budget": config["token_budget"],
+        "use_gemini": config["provider"] == "gemini",
+        "gemini_prompt_template": GEMINI_PROMPT_TEMPLATE if config["provider"] == "gemini" else None,
     }
+    # Surface env overrides for transparency
+    if _GEMINI_MODEL != "gemini-2.5-flash" and config["provider"] == "gemini":
+        result["_env_override"] = f"HARNESS_GEMINI_MODEL={_GEMINI_MODEL}"
+    return result
 
 
-def build_prompt(dimension: str, tool_output: str, code_sample: str = "") -> str:
-    """Build evaluation prompt for a dimension."""
-    return PROMPT_TEMPLATE.format(
+def build_gemini_prompt(dimension: str, tool_output: str, code_sample: str = "") -> str:
+    """Build Gemini prompt for a tool-first dimension."""
+    return GEMINI_PROMPT_TEMPLATE.format(
         dimension=dimension,
-        tool_output=tool_output[:6000],
+        tool_output=tool_output[:6000],       # Hard cap to stay in budget
         code_sample=code_sample[:2000] if code_sample else "(not provided)",
     )
 
@@ -73,13 +131,21 @@ def main():
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} <dimension> [tool_output_file]")
         sys.exit(1)
+
     dimension = sys.argv[1]
     tool_output = ""
+
     if len(sys.argv) > 2:
         with open(sys.argv[2]) as f:
             tool_output = f.read()
+
     decision = route(dimension)
-    decision["prompt"] = build_prompt(dimension, tool_output)
+
+    if decision["use_gemini"] and tool_output:
+        decision["gemini_prompt"] = build_gemini_prompt(dimension, tool_output)
+    else:
+        decision.pop("gemini_prompt_template", None)
+
     print(json.dumps(decision, indent=2))
 
 
