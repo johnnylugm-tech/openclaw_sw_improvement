@@ -12,6 +12,13 @@ from pathlib import Path
 import tempfile
 import json
 
+# CRG integration (graceful — import failure is non-fatal)
+try:
+    from crg_integration import ensure_ready as _crg_ensure_ready
+    _HAS_CRG_MODULE = True
+except ImportError:
+    _HAS_CRG_MODULE = False
+
 
 def clone_repo(github_url):
     """Clone GitHub repo to temporary directory."""
@@ -70,99 +77,46 @@ def resolve_target(target):
 
 def init_crg(repo_path: str, work_dir: str) -> dict:
     """
-    Ensure CRG is ready. Transparent — handles all cases:
-      - Not installed  → available: False
-      - Installed, no graph → auto-build, then available: True
-      - Installed, graph ready → available: True immediately
-    Writes status to work_dir/crg_status.json for downstream steps.
+    Auto-initialize CRG if installed. Writes status to .sessi-work/crg_status.json
+    so all downstream steps can read it without re-checking.
+
+    Returns CRG status dict.
     """
+    print("[CRG] Checking Code Review Graph…", file=sys.stderr)
+
+    if _HAS_CRG_MODULE:
+        status = _crg_ensure_ready(repo_path)
+    else:
+        # Fallback: try CLI directly
+        try:
+            result = subprocess.run(
+                ["python3", Path(__file__).parent / "crg_integration.py", "ensure", repo_path],
+                capture_output=True, text=True, timeout=360,
+            )
+            status = json.loads(result.stdout) if result.stdout.strip() else {
+                "available": False, "reason": "crg_integration.py returned no output"
+            }
+        except Exception as e:
+            status = {"available": False, "reason": str(e)[:120]}
+
+    # Write status to work_dir for downstream steps
     work_path = Path(work_dir)
     work_path.mkdir(parents=True, exist_ok=True)
-
-    scripts_dir = Path(__file__).parent
-    crg_script = scripts_dir / "crg_wrapper.py"
-
-    # Check if crg_wrapper.py is available
-    if not crg_script.exists():
-        status = {"available": False, "reason": "crg_wrapper not found"}
-        _write_status(work_path, status)
-        return status
-
-    # Check if CRG binary is available
-    crg_bin = Path("/opt/homebrew/bin/code-review-graph")
-    if not crg_bin.exists():
-        status = {"available": False, "reason": "code-review-graph not installed"}
-        _write_status(work_path, status)
-        return status
-
-    # Check node count
-    try:
-        result = subprocess.run(
-            [sys.executable, str(crg_script), "stats", repo_path],
-            capture_output=True, text=True, timeout=30,
-        )
-        stats = json.loads(result.stdout) if result.stdout.strip() else {}
-        node_count = stats.get("node_count", 0)
-    except Exception:
-        node_count = 0
-
-    action = "already_built"
-    if node_count == 0:
-        # Graph not built — auto-build
-        print(f"[CRG] Graph not found. Building now (may take 30–120s)…",
-              file=sys.stderr)
-        try:
-            build_result = subprocess.run(
-                [str(crg_bin), "build", "--repo", repo_path],
-                check=True, capture_output=True, text=True, timeout=300,
-            )
-            # Re-check node count
-            try:
-                result2 = subprocess.run(
-                    [sys.executable, str(crg_script), "stats", repo_path],
-                    capture_output=True, text=True, timeout=30,
-                )
-                stats2 = json.loads(result2.stdout) if result2.stdout.strip() else {}
-                node_count = stats2.get("node_count", 0)
-            except Exception:
-                node_count = 0
-            action = "auto_built"
-            print(f"[CRG] Graph built: {node_count} nodes.", file=sys.stderr)
-        except subprocess.CalledProcessError as e:
-            status = {"available": False,
-                      "reason": f"build failed: {e.stderr[:120]}",
-                      "action": "build_failed"}
-            _write_status(work_path, status)
-            return status
-        except subprocess.TimeoutExpired:
-            status = {"available": False,
-                      "reason": "build timed out after 300s",
-                      "action": "build_timeout"}
-            _write_status(work_path, status)
-            return status
-    else:
-        print(f"[CRG] Graph ready: {node_count} nodes.", file=sys.stderr)
-
-    status = {
-        "available": True,
-        "node_count": node_count,
-        "action": action,
-        "repo": repo_path,
-    }
-    _write_status(work_path, status)
-    return status
-
-
-def _write_status(work_path, status):
     status_file = work_path / "crg_status.json"
     with open(status_file, "w") as f:
         json.dump(status, f, indent=2)
-    if status["available"]:
+
+    if status.get("available"):
         nodes = status.get("node_count", "?")
-        print(f"[CRG] Ready — {nodes} nodes", file=sys.stderr)
+        action = status.get("action", "")
+        tag = " (auto-built)" if action == "auto_built" else ""
+        print(f"[CRG] ✓ Ready — {nodes} nodes{tag}", file=sys.stderr)
     else:
         print(f"[CRG] Not available — {status.get('reason', 'unknown')}. "
-              f"Run scripts/install_crg.sh first.", file=sys.stderr)
+              f"Framework will run without CRG (higher token cost for Tier 3).",
+              file=sys.stderr)
+
+    return status
 
 
 def main():
