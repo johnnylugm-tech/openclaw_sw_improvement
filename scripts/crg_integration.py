@@ -21,7 +21,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-CRG_BIN = "code-review-graph"
+CRG_BIN = "/opt/homebrew/bin/code-review-graph"  # explicit path avoids PATH/Python-version issues
 CRG_TIMEOUT = 60
 
 
