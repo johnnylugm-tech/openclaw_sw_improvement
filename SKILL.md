@@ -135,6 +135,51 @@ For each fix:
 - One commit per fix
 - Loop to 3a
 
+### Step 3g. Repository Hygiene Check (Mandatory, Every Round)
+
+**Every round must pass this check before proceeding to Step 4 or tagging.**
+
+```bash
+# 1. Working tree must be clean
+git status --porcelain
+# → Must output empty. Uncommitted changes = framework failure.
+
+# 2. No artifacts tracked by git
+git ls-files | grep -E "(\.sessi-work/|coverage/|mutants/|\.coverage\.|\.pytest_cache/|\.code-review-graph/)"
+# → Must output empty. Any match = immediately update .gitignore + git rm --cached
+
+# 3. No artifacts left on disk (even if gitignored)
+ls .sessi-work/ coverage/ mutants/ .pytest_cache/ .coverage.* 2>/dev/null
+# → .sessi-work/ may exist; all others must not exist
+```
+
+**If artifacts are found:**
+1. Update `.gitignore` to cover the artifact type
+2. `git rm --cached <path>` to untrack (do NOT delete from disk)
+3. Commit the .gitignore update
+4. Re-verify the check passes
+
+**After the final round (Step 4), clean git history once:**
+```bash
+# Only if artifacts were EVER committed to history (detected in Step 3g)
+# This is a history rewrite — requires force push
+git filter-repo --invert-paths --force  # remove artifacts from history
+git push --force
+```
+
+**Artifat classes that must never enter the repo:**
+
+| Pattern | Type | Always gitignored? |
+|---------|------|-------------------|
+| `.sessi-work/` | Session state | ✅ Yes |
+| `coverage/` | Coverage reports | ⚠️ Must be added if missing |
+| `mutants/` | Mutation test output | ⚠️ Must be added if missing |
+| `.coverage.*` | Coverage data | ⚠️ Must be added if missing |
+| `.pytest_cache/` | Pytest cache | ⚠️ Must be added if missing |
+| `.code-review-graph/` | CRG data | ⚠️ Must be added if missing |
+
+> **Why this step is critical:** `coverage/` and `mutants/` were committed to `tts-kokoro-compare` history across 43 commits. They inflated the repo size, polluted git logs, and required `git filter-repo` to remove. Prevention via `.gitignore` + `git rm --cached` is the only correct approach — retroactive cleanup is a last resort.
+
 ### Step 4: Final Report
 
 Full-transparency report — see `prompts/final_report.md` for the protocol.
